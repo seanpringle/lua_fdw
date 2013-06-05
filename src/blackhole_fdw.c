@@ -109,7 +109,7 @@ static bool blackholeAnalyzeForeignTable(Relation relation,
 /* 
  * structures used by the FDW 
  *
- * These next two are not actualkly used by blackhole, but something like this
+ * These next two are not actually used by blackhole, but something like this
  * will be needed by anything more complicated that does actual work.
  *
  */
@@ -187,7 +187,7 @@ blackhole_fdw_validator(PG_FUNCTION_ARGS)
 		ereport(ERROR,
 				(errcode(ERRCODE_FDW_INVALID_OPTION_NAME),
 				 errmsg("invalid options"),
-				 errhint("Blackhole FDW doies not support any options")));
+				 errhint("Blackhole FDW does not support any options")));
 
 	PG_RETURN_VOID();
 }
@@ -223,7 +223,7 @@ blackholeGetForeignRelSize(PlannerInfo *root,
 	fdw_private = palloc0(sizeof(BlackholeFdwPlanState));
 	baserel->fdw_private = (void *) fdw_private;
 
-	/* initialize reuired state in fdw_private */
+	/* initialize required state in fdw_private */
 
 }
 
