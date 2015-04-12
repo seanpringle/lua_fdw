@@ -36,6 +36,7 @@ PG_FUNCTION_INFO_V1(blackhole_fdw_validator);
 
 
 /* callback functions */
+#if (PG_VERSION_NUM >= 90200)
 static void blackholeGetForeignRelSize(PlannerInfo *root,
 						   RelOptInfo *baserel,
 						   Oid foreigntableid);
@@ -50,6 +51,9 @@ static ForeignScan *blackholeGetForeignPlan(PlannerInfo *root,
 						ForeignPath *best_path,
 						List *tlist,
 						List *scan_clauses);
+#else
+static FdwPlan *blackholePlanForeignScan(Oid foreigntableid, PlannerInfo *root, RelOptInfo *baserel);
+#endif
 
 static void blackholeBeginForeignScan(ForeignScanState *node,
 						  int eflags);
@@ -60,6 +64,7 @@ static void blackholeReScanForeignScan(ForeignScanState *node);
 
 static void blackholeEndForeignScan(ForeignScanState *node);
 
+#if (PG_VERSION_NUM >= 90300)
 static void blackholeAddForeignUpdateTargets(Query *parsetree,
 								 RangeTblEntry *target_rte,
 								 Relation target_relation);
@@ -92,24 +97,29 @@ static TupleTableSlot *blackholeExecForeignDelete(EState *estate,
 
 static void blackholeEndForeignModify(EState *estate,
 						  ResultRelInfo *rinfo);
+#endif
 
 static void blackholeExplainForeignScan(ForeignScanState *node,
 							struct ExplainState *es);
 
+#if (PG_VERSION_NUM >= 90300)
 static void blackholeExplainForeignModify(ModifyTableState *mtstate,
 							  ResultRelInfo *rinfo,
 							  List *fdw_private,
 							  int subplan_index,
 							  struct ExplainState *es);
+#endif
 
+#if (PG_VERSION_NUM >= 90200)
 static bool blackholeAnalyzeForeignTable(Relation relation,
 							 AcquireSampleRowsFunc *func,
 							 BlockNumber *totalpages);
+#endif
 
 /* 
  * structures used by the FDW 
  *
- * These next two are not actualkly used by blackhole, but something like this
+ * These next two are not actually used by blackhole, but something like this
  * will be needed by anything more complicated that does actual work.
  *
  */
@@ -144,9 +154,11 @@ blackhole_fdw_handler(PG_FUNCTION_ARGS)
 	/* assign the handlers for the FDW */
 
 	/* these are required */
+#if (PG_VERSION_NUM >= 90200)
 	fdwroutine->GetForeignRelSize = blackholeGetForeignRelSize;
 	fdwroutine->GetForeignPaths = blackholeGetForeignPaths;
 	fdwroutine->GetForeignPlan = blackholeGetForeignPlan;
+#endif
 	fdwroutine->BeginForeignScan = blackholeBeginForeignScan;
 	fdwroutine->IterateForeignScan = blackholeIterateForeignScan;
 	fdwroutine->ReScanForeignScan = blackholeReScanForeignScan;
@@ -154,6 +166,7 @@ blackhole_fdw_handler(PG_FUNCTION_ARGS)
 
 	/* remainder are optional - use NULL if not required */
 	/* support for insert / update / delete */
+#if (PG_VERSION_NUM >= 90300)
 	fdwroutine->AddForeignUpdateTargets = blackholeAddForeignUpdateTargets;
 	fdwroutine->PlanForeignModify = blackholePlanForeignModify;
 	fdwroutine->BeginForeignModify = blackholeBeginForeignModify;
@@ -161,13 +174,18 @@ blackhole_fdw_handler(PG_FUNCTION_ARGS)
 	fdwroutine->ExecForeignUpdate = blackholeExecForeignUpdate;
 	fdwroutine->ExecForeignDelete = blackholeExecForeignDelete;
 	fdwroutine->EndForeignModify = blackholeEndForeignModify;
+#endif
 
 	/* support for EXPLAIN */
 	fdwroutine->ExplainForeignScan = blackholeExplainForeignScan;
+#if (PG_VERSION_NUM >= 90300)
 	fdwroutine->ExplainForeignModify = blackholeExplainForeignModify;
+#endif
 
+#if (PG_VERSION_NUM >= 90200)
 	/* support for ANALYSE */
 	fdwroutine->AnalyzeForeignTable = blackholeAnalyzeForeignTable;
+#endif
 
 	PG_RETURN_POINTER(fdwroutine);
 }
@@ -187,11 +205,12 @@ blackhole_fdw_validator(PG_FUNCTION_ARGS)
 		ereport(ERROR,
 				(errcode(ERRCODE_FDW_INVALID_OPTION_NAME),
 				 errmsg("invalid options"),
-				 errhint("Blackhole FDW doies not support any options")));
+				 errhint("Blackhole FDW does not support any options")));
 
 	PG_RETURN_VOID();
 }
 
+#if (PG_VERSION_NUM >= 90200)
 static void
 blackholeGetForeignRelSize(PlannerInfo *root,
 						   RelOptInfo *baserel,
@@ -223,7 +242,7 @@ blackholeGetForeignRelSize(PlannerInfo *root,
 	fdw_private = palloc0(sizeof(BlackholeFdwPlanState));
 	baserel->fdw_private = (void *) fdw_private;
 
-	/* initialize reuired state in fdw_private */
+	/* initialize required state in fdw_private */
 
 }
 
@@ -314,6 +333,7 @@ blackholeGetForeignPlan(PlannerInfo *root,
 							NIL);		/* no private state either */
 
 }
+#endif
 
 
 static void
@@ -417,6 +437,7 @@ blackholeEndForeignScan(ForeignScanState *node)
 }
 
 
+#if (PG_VERSION_NUM >= 90300)
 static void
 blackholeAddForeignUpdateTargets(Query *parsetree,
 								 RangeTblEntry *target_rte,
@@ -654,6 +675,7 @@ blackholeEndForeignModify(EState *estate,
 	elog(DEBUG1,"entering function %s",__func__);
 
 }
+#endif
 
 
 static void
@@ -676,6 +698,7 @@ blackholeExplainForeignScan(ForeignScanState *node,
 }
 
 
+#if (PG_VERSION_NUM >= 90300)
 static void
 blackholeExplainForeignModify(ModifyTableState *mtstate,
 							  ResultRelInfo *rinfo,
@@ -698,8 +721,10 @@ blackholeExplainForeignModify(ModifyTableState *mtstate,
 	elog(DEBUG1,"entering function %s",__func__);
 
 }
+#endif
 
 
+#if (PG_VERSION_NUM >= 90200)
 static bool
 blackholeAnalyzeForeignTable(Relation relation,
 							 AcquireSampleRowsFunc *func,
@@ -736,3 +761,4 @@ blackholeAnalyzeForeignTable(Relation relation,
 
 	return false;
 }
+#endif
