@@ -151,40 +151,48 @@ blackhole_fdw_handler(PG_FUNCTION_ARGS)
 
 	elog(DEBUG1,"entering function %s",__func__);
 
-	/* assign the handlers for the FDW */
+	/* assign the handlers for the FDW
+	 *
+	 * This function might be called a number of times. In particular,
+	 * it is likely to be called for each INSERT statement. For an explanation,
+	 * see core postgres file src/optimizer/plan/createplan.c where it calls
+	 * GetFdwRoutineByRelId(().
+	 */
+
+	/* Required by notations: S=SELECT I=INSERT U=UPDATE D=DELETE */
 
 	/* these are required */
 #if (PG_VERSION_NUM >= 90200)
-	fdwroutine->GetForeignRelSize = blackholeGetForeignRelSize;
-	fdwroutine->GetForeignPaths = blackholeGetForeignPaths;
-	fdwroutine->GetForeignPlan = blackholeGetForeignPlan;
+	fdwroutine->GetForeignRelSize = blackholeGetForeignRelSize; /* S U D */
+	fdwroutine->GetForeignPaths = blackholeGetForeignPaths; /* S U D */
+	fdwroutine->GetForeignPlan = blackholeGetForeignPlan; /* S U D */
 #endif
-	fdwroutine->BeginForeignScan = blackholeBeginForeignScan;
-	fdwroutine->IterateForeignScan = blackholeIterateForeignScan;
-	fdwroutine->ReScanForeignScan = blackholeReScanForeignScan;
-	fdwroutine->EndForeignScan = blackholeEndForeignScan;
+	fdwroutine->BeginForeignScan = blackholeBeginForeignScan; /* S U D */
+	fdwroutine->IterateForeignScan = blackholeIterateForeignScan; /* S */
+	fdwroutine->ReScanForeignScan = blackholeReScanForeignScan; /* S */
+	fdwroutine->EndForeignScan = blackholeEndForeignScan; /* S U D */
 
 	/* remainder are optional - use NULL if not required */
 	/* support for insert / update / delete */
 #if (PG_VERSION_NUM >= 90300)
-	fdwroutine->AddForeignUpdateTargets = blackholeAddForeignUpdateTargets;
-	fdwroutine->PlanForeignModify = blackholePlanForeignModify;
-	fdwroutine->BeginForeignModify = blackholeBeginForeignModify;
-	fdwroutine->ExecForeignInsert = blackholeExecForeignInsert;
-	fdwroutine->ExecForeignUpdate = blackholeExecForeignUpdate;
-	fdwroutine->ExecForeignDelete = blackholeExecForeignDelete;
-	fdwroutine->EndForeignModify = blackholeEndForeignModify;
+	fdwroutine->AddForeignUpdateTargets = blackholeAddForeignUpdateTargets; /* U D */
+	fdwroutine->PlanForeignModify = blackholePlanForeignModify; /* I U D */
+	fdwroutine->BeginForeignModify = blackholeBeginForeignModify;  /* I U D */
+	fdwroutine->ExecForeignInsert = blackholeExecForeignInsert; /* I */
+	fdwroutine->ExecForeignUpdate = blackholeExecForeignUpdate; /* U */
+	fdwroutine->ExecForeignDelete = blackholeExecForeignDelete; /* D */
+	fdwroutine->EndForeignModify = blackholeEndForeignModify; /* I U D */
 #endif
 
 	/* support for EXPLAIN */
-	fdwroutine->ExplainForeignScan = blackholeExplainForeignScan;
+	fdwroutine->ExplainForeignScan = blackholeExplainForeignScan;  /* EXPLAIN S U D */
 #if (PG_VERSION_NUM >= 90300)
-	fdwroutine->ExplainForeignModify = blackholeExplainForeignModify;
+	fdwroutine->ExplainForeignModify = blackholeExplainForeignModify; /* EXPLAIN I U D*/
 #endif
 
 #if (PG_VERSION_NUM >= 90200)
 	/* support for ANALYSE */
-	fdwroutine->AnalyzeForeignTable = blackholeAnalyzeForeignTable;
+	fdwroutine->AnalyzeForeignTable = blackholeAnalyzeForeignTable; /* ANALYZE only */
 #endif
 
 	PG_RETURN_POINTER(fdwroutine);
