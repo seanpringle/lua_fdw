@@ -9,7 +9,7 @@
  * Author: Andrew Dunstan <andrew@dunslane.net>
  *
  * IDENTIFICATION
- *        blackhole_fdw/src/blackhole_fdw.c
+ *		  blackhole_fdw/src/blackhole_fdw.c
  *
  *-------------------------------------------------------------------------
  */
@@ -97,17 +97,20 @@ static TupleTableSlot *blackholeExecForeignDelete(EState *estate,
 
 static void blackholeEndForeignModify(EState *estate,
 						  ResultRelInfo *rinfo);
+
+static int	blackholeIsForeignRelUpdatable(Relation rel);
+
 #endif
 
 static void blackholeExplainForeignScan(ForeignScanState *node,
-							struct ExplainState *es);
+							struct ExplainState * es);
 
 #if (PG_VERSION_NUM >= 90300)
 static void blackholeExplainForeignModify(ModifyTableState *mtstate,
 							  ResultRelInfo *rinfo,
 							  List *fdw_private,
 							  int subplan_index,
-							  struct ExplainState *es);
+							  struct ExplainState * es);
 #endif
 
 #if (PG_VERSION_NUM >= 90200)
@@ -116,8 +119,31 @@ static bool blackholeAnalyzeForeignTable(Relation relation,
 							 BlockNumber *totalpages);
 #endif
 
-/* 
- * structures used by the FDW 
+#if (PG_VERSION_NUM >= 90500)
+
+static void blackholeGetForeignJoinPaths(PlannerInfo *root,
+							 RelOptInfo *joinrel,
+							 RelOptInfo *outerrel,
+							 RelOptInfo *innerrel,
+							 JoinType jointype,
+							 JoinPathExtraData *extra);
+
+
+static RowMarkType blackholeGetForeignRowMarkType(RangeTblEntry *rte,
+							   LockClauseStrength strength);
+
+static HeapTuple blackholeRefetchForeignRow(EState *estate,
+						   ExecRowMark *erm,
+						   Datum rowid,
+						   bool *updated);
+
+static List *blackholeImportForeignSchema(ImportForeignSchemaStmt *stmt,
+							 Oid serverOid);
+
+#endif
+
+/*
+ * structures used by the FDW
  *
  * These next two are not actually used by blackhole, but something like this
  * will be needed by anything more complicated that does actual work.
@@ -134,14 +160,14 @@ struct blackholeFdwOption
 };
 
 /*
- * This is what will be set and stashed away in fdw_private and fetched 
+ * This is what will be set and stashed away in fdw_private and fetched
  * for subsequent routines.
  */
 typedef struct
 {
 	char	   *foo;
 	int			bar;
-}	BlackholeFdwPlanState;
+} BlackholeFdwPlanState;
 
 
 Datum
@@ -149,13 +175,14 @@ blackhole_fdw_handler(PG_FUNCTION_ARGS)
 {
 	FdwRoutine *fdwroutine = makeNode(FdwRoutine);
 
-	elog(DEBUG1,"entering function %s",__func__);
+	elog(DEBUG1, "entering function %s", __func__);
 
-	/* assign the handlers for the FDW
+	/*
+	 * assign the handlers for the FDW
 	 *
-	 * This function might be called a number of times. In particular,
-	 * it is likely to be called for each INSERT statement. For an explanation,
-	 * see core postgres file src/optimizer/plan/createplan.c where it calls
+	 * This function might be called a number of times. In particular, it is
+	 * likely to be called for each INSERT statement. For an explanation, see
+	 * core postgres file src/optimizer/plan/createplan.c where it calls
 	 * GetFdwRoutineByRelId(().
 	 */
 
@@ -164,36 +191,52 @@ blackhole_fdw_handler(PG_FUNCTION_ARGS)
 	/* these are required */
 #if (PG_VERSION_NUM >= 90200)
 	fdwroutine->GetForeignRelSize = blackholeGetForeignRelSize; /* S U D */
-	fdwroutine->GetForeignPaths = blackholeGetForeignPaths; /* S U D */
-	fdwroutine->GetForeignPlan = blackholeGetForeignPlan; /* S U D */
+	fdwroutine->GetForeignPaths = blackholeGetForeignPaths;		/* S U D */
+	fdwroutine->GetForeignPlan = blackholeGetForeignPlan;		/* S U D */
 #endif
-	fdwroutine->BeginForeignScan = blackholeBeginForeignScan; /* S U D */
-	fdwroutine->IterateForeignScan = blackholeIterateForeignScan; /* S */
+	fdwroutine->BeginForeignScan = blackholeBeginForeignScan;	/* S U D */
+	fdwroutine->IterateForeignScan = blackholeIterateForeignScan;		/* S */
 	fdwroutine->ReScanForeignScan = blackholeReScanForeignScan; /* S */
-	fdwroutine->EndForeignScan = blackholeEndForeignScan; /* S U D */
+	fdwroutine->EndForeignScan = blackholeEndForeignScan;		/* S U D */
 
 	/* remainder are optional - use NULL if not required */
 	/* support for insert / update / delete */
 #if (PG_VERSION_NUM >= 90300)
-	fdwroutine->AddForeignUpdateTargets = blackholeAddForeignUpdateTargets; /* U D */
+	fdwroutine->IsForeignRelUpdatable = blackholeIsForeignRelUpdatable;
+	fdwroutine->AddForeignUpdateTargets = blackholeAddForeignUpdateTargets;		/* U D */
 	fdwroutine->PlanForeignModify = blackholePlanForeignModify; /* I U D */
-	fdwroutine->BeginForeignModify = blackholeBeginForeignModify;  /* I U D */
+	fdwroutine->BeginForeignModify = blackholeBeginForeignModify;		/* I U D */
 	fdwroutine->ExecForeignInsert = blackholeExecForeignInsert; /* I */
 	fdwroutine->ExecForeignUpdate = blackholeExecForeignUpdate; /* U */
 	fdwroutine->ExecForeignDelete = blackholeExecForeignDelete; /* D */
-	fdwroutine->EndForeignModify = blackholeEndForeignModify; /* I U D */
+	fdwroutine->EndForeignModify = blackholeEndForeignModify;	/* I U D */
 #endif
 
 	/* support for EXPLAIN */
-	fdwroutine->ExplainForeignScan = blackholeExplainForeignScan;  /* EXPLAIN S U D */
+	fdwroutine->ExplainForeignScan = blackholeExplainForeignScan;		/* EXPLAIN S U D */
 #if (PG_VERSION_NUM >= 90300)
-	fdwroutine->ExplainForeignModify = blackholeExplainForeignModify; /* EXPLAIN I U D*/
+	fdwroutine->ExplainForeignModify = blackholeExplainForeignModify;	/* EXPLAIN I U D */
 #endif
 
 #if (PG_VERSION_NUM >= 90200)
 	/* support for ANALYSE */
-	fdwroutine->AnalyzeForeignTable = blackholeAnalyzeForeignTable; /* ANALYZE only */
+	fdwroutine->AnalyzeForeignTable = blackholeAnalyzeForeignTable;		/* ANALYZE only */
 #endif
+
+
+#if (PG_VERSION_NUM >= 90500)
+	/* Support functions for IMPORT FOREIGN SCHEMA */
+	fdwroutine->ImportForeignSchema = blackholeImportForeignSchema;
+
+	/* Support for scanning foreign joins */
+	fdwroutine->GetForeignJoinPaths = blackholeGetForeignJoinPaths;
+
+	/* Support for locking foreign rows */
+	fdwroutine->GetForeignRowMarkType = blackholeGetForeignRowMarkType;
+	fdwroutine->RefetchForeignRow = blackholeRefetchForeignRow;
+
+#endif
+
 
 	PG_RETURN_POINTER(fdwroutine);
 }
@@ -203,7 +246,7 @@ blackhole_fdw_validator(PG_FUNCTION_ARGS)
 {
 	List	   *options_list = untransformRelOptions(PG_GETARG_DATUM(0));
 
-	elog(DEBUG1,"entering function %s",__func__);
+	elog(DEBUG1, "entering function %s", __func__);
 
 	/* make sure the options are valid */
 
@@ -243,7 +286,7 @@ blackholeGetForeignRelSize(PlannerInfo *root,
 
 	BlackholeFdwPlanState *fdw_private;
 
-	elog(DEBUG1,"entering function %s",__func__);
+	elog(DEBUG1, "entering function %s", __func__);
 
 	baserel->rows = 0;
 
@@ -281,7 +324,7 @@ blackholeGetForeignPaths(PlannerInfo *root,
 	Cost		startup_cost,
 				total_cost;
 
-	elog(DEBUG1,"entering function %s",__func__);
+	elog(DEBUG1, "entering function %s", __func__);
 
 	startup_cost = 0;
 	total_cost = startup_cost + baserel->rows;
@@ -329,18 +372,28 @@ blackholeGetForeignPlan(PlannerInfo *root,
 	 * handled elsewhere).
 	 */
 
-	elog(DEBUG1,"entering function %s",__func__);
+	elog(DEBUG1, "entering function %s", __func__);
 
 	scan_clauses = extract_actual_clauses(scan_clauses, false);
 
 	/* Create the ForeignScan node */
+#if(PG_VERSION_NUM < 90500)
 	return make_foreignscan(tlist,
 							scan_clauses,
 							scan_relid,
 							NIL,	/* no expressions to evaluate */
 							NIL);		/* no private state either */
+#else
+	return make_foreignscan(tlist,
+							scan_clauses,
+							scan_relid,
+							NIL,	/* no expressions to evaluate */
+							NIL,	/* no private state either */
+							NIL);		/* no private state either */
+#endif
 
 }
+
 #endif
 
 
@@ -367,7 +420,7 @@ blackholeBeginForeignScan(ForeignScanState *node,
 	 *
 	 */
 
-	elog(DEBUG1,"entering function %s",__func__);
+	elog(DEBUG1, "entering function %s", __func__);
 
 }
 
@@ -406,7 +459,7 @@ blackholeIterateForeignScan(ForeignScanState *node)
 	 */
 	TupleTableSlot *slot = node->ss.ss_ScanTupleSlot;
 
-	elog(DEBUG1,"entering function %s",__func__);
+	elog(DEBUG1, "entering function %s", __func__);
 
 	ExecClearTuple(slot);
 
@@ -426,7 +479,7 @@ blackholeReScanForeignScan(ForeignScanState *node)
 	 * return exactly the same rows.
 	 */
 
-	elog(DEBUG1,"entering function %s",__func__);
+	elog(DEBUG1, "entering function %s", __func__);
 
 }
 
@@ -440,7 +493,7 @@ blackholeEndForeignScan(ForeignScanState *node)
 	 * remote servers should be cleaned up.
 	 */
 
-	elog(DEBUG1,"entering function %s",__func__);
+	elog(DEBUG1, "entering function %s", __func__);
 
 }
 
@@ -478,7 +531,7 @@ blackholeAddForeignUpdateTargets(Query *parsetree,
 	 * relies on an unchanging primary key to identify rows.)
 	 */
 
-	elog(DEBUG1,"entering function %s",__func__);
+	elog(DEBUG1, "entering function %s", __func__);
 
 }
 
@@ -509,7 +562,7 @@ blackholePlanForeignModify(PlannerInfo *root,
 	 * BeginForeignModify will be NIL.
 	 */
 
-	elog(DEBUG1,"entering function %s",__func__);
+	elog(DEBUG1, "entering function %s", __func__);
 
 	return NULL;
 }
@@ -548,7 +601,7 @@ blackholeBeginForeignModify(ModifyTableState *mtstate,
 	 * during executor startup.
 	 */
 
-	elog(DEBUG1,"entering function %s",__func__);
+	elog(DEBUG1, "entering function %s", __func__);
 
 }
 
@@ -586,7 +639,7 @@ blackholeExecForeignInsert(EState *estate,
 	 *
 	 */
 
-	elog(DEBUG1,"entering function %s",__func__);
+	elog(DEBUG1, "entering function %s", __func__);
 
 	return slot;
 }
@@ -625,7 +678,7 @@ blackholeExecForeignUpdate(EState *estate,
 	 *
 	 */
 
-	elog(DEBUG1,"entering function %s",__func__);
+	elog(DEBUG1, "entering function %s", __func__);
 
 	return slot;
 }
@@ -661,7 +714,7 @@ blackholeExecForeignDelete(EState *estate,
 	 * from the foreign table will fail with an error message.
 	 */
 
-	elog(DEBUG1,"entering function %s",__func__);
+	elog(DEBUG1, "entering function %s", __func__);
 
 	return slot;
 }
@@ -680,15 +733,40 @@ blackholeEndForeignModify(EState *estate,
 	 * during executor shutdown.
 	 */
 
-	elog(DEBUG1,"entering function %s",__func__);
+	elog(DEBUG1, "entering function %s", __func__);
 
+}
+
+static int
+blackholeIsForeignRelUpdatable(Relation rel)
+{
+	/*
+	 * Report which update operations the specified foreign table supports.
+	 * The return value should be a bit mask of rule event numbers indicating
+	 * which operations are supported by the foreign table, using the CmdType
+	 * enumeration; that is, (1 << CMD_UPDATE) = 4 for UPDATE, (1 <<
+	 * CMD_INSERT) = 8 for INSERT, and (1 << CMD_DELETE) = 16 for DELETE.
+	 *
+	 * If the IsForeignRelUpdatable pointer is set to NULL, foreign tables are
+	 * assumed to be insertable, updatable, or deletable if the FDW provides
+	 * ExecForeignInsert, ExecForeignUpdate, or ExecForeignDelete
+	 * respectively. This function is only needed if the FDW supports some
+	 * tables that are updatable and some that are not. (Even then, it's
+	 * permissible to throw an error in the execution routine instead of
+	 * checking in this function. However, this function is used to determine
+	 * updatability for display in the information_schema views.)
+	 */
+
+	elog(DEBUG1, "entering function %s", __func__);
+
+	return (1 << CMD_UPDATE) | (1 << CMD_INSERT) | (1 << CMD_DELETE);
 }
 #endif
 
 
 static void
 blackholeExplainForeignScan(ForeignScanState *node,
-							struct ExplainState *es)
+							struct ExplainState * es)
 {
 	/*
 	 * Print additional EXPLAIN output for a foreign table scan. This function
@@ -701,7 +779,7 @@ blackholeExplainForeignScan(ForeignScanState *node,
 	 * information is printed during EXPLAIN.
 	 */
 
-	elog(DEBUG1,"entering function %s",__func__);
+	elog(DEBUG1, "entering function %s", __func__);
 
 }
 
@@ -712,7 +790,7 @@ blackholeExplainForeignModify(ModifyTableState *mtstate,
 							  ResultRelInfo *rinfo,
 							  List *fdw_private,
 							  int subplan_index,
-							  struct ExplainState *es)
+							  struct ExplainState * es)
 {
 	/*
 	 * Print additional EXPLAIN output for a foreign table update. This
@@ -726,7 +804,7 @@ blackholeExplainForeignModify(ModifyTableState *mtstate,
 	 * information is printed during EXPLAIN.
 	 */
 
-	elog(DEBUG1,"entering function %s",__func__);
+	elog(DEBUG1, "entering function %s", __func__);
 
 }
 #endif
@@ -765,8 +843,168 @@ blackholeAnalyzeForeignTable(Relation relation,
 	 * ----
 	 */
 
-	elog(DEBUG1,"entering function %s",__func__);
+	elog(DEBUG1, "entering function %s", __func__);
 
 	return false;
 }
+#endif
+
+
+#if (PG_VERSION_NUM >= 90500)
+static void
+blackholeGetForeignJoinPaths(PlannerInfo *root,
+							 RelOptInfo *joinrel,
+							 RelOptInfo *outerrel,
+							 RelOptInfo *innerrel,
+							 JoinType jointype,
+							 JoinPathExtraData *extra)
+{
+	/*
+	 * Create possible access paths for a join of two (or more) foreign tables
+	 * that all belong to the same foreign server. This optional function is
+	 * called during query planning. As with GetForeignPaths, this function
+	 * should generate ForeignPath path(s) for the supplied joinrel, and call
+	 * add_path to add these paths to the set of paths considered for the
+	 * join. But unlike GetForeignPaths, it is not necessary that this
+	 * function succeed in creating at least one path, since paths involving
+	 * local joining are always possible.
+	 *
+	 * Note that this function will be invoked repeatedly for the same join
+	 * relation, with different combinations of inner and outer relations; it
+	 * is the responsibility of the FDW to minimize duplicated work.
+	 *
+	 * If a ForeignPath path is chosen for the join, it will represent the
+	 * entire join process; paths generated for the component tables and
+	 * subsidiary joins will not be used. Subsequent processing of the join
+	 * path proceeds much as it does for a path scanning a single foreign
+	 * table. One difference is that the scanrelid of the resulting
+	 * ForeignScan plan node should be set to zero, since there is no single
+	 * relation that it represents; instead, the fs_relids field of the
+	 * ForeignScan node represents the set of relations that were joined. (The
+	 * latter field is set up automatically by the core planner code, and need
+	 * not be filled by the FDW.) Another difference is that, because the
+	 * column list for a remote join cannot be found from the system catalogs,
+	 * the FDW must fill fdw_scan_tlist with an appropriate list of
+	 * TargetEntry nodes, representing the set of columns it will supply at
+	 * runtime in the tuples it returns.
+	 */
+
+	elog(DEBUG1, "entering function %s", __func__);
+
+}
+
+
+static RowMarkType
+blackholeGetForeignRowMarkType(RangeTblEntry *rte,
+							   LockClauseStrength strength)
+{
+	/*
+	 * Report which row-marking option to use for a foreign table. rte is the
+	 * RangeTblEntry node for the table and strength describes the lock
+	 * strength requested by the relevant FOR UPDATE/SHARE clause, if any. The
+	 * result must be a member of the RowMarkType enum type.
+	 *
+	 * This function is called during query planning for each foreign table
+	 * that appears in an UPDATE, DELETE, or SELECT FOR UPDATE/SHARE query and
+	 * is not the target of UPDATE or DELETE.
+	 *
+	 * If the GetForeignRowMarkType pointer is set to NULL, the ROW_MARK_COPY
+	 * option is always used. (This implies that RefetchForeignRow will never
+	 * be called, so it need not be provided either.)
+	 */
+
+	elog(DEBUG1, "entering function %s", __func__);
+
+	return ROW_MARK_COPY;
+
+}
+
+static HeapTuple
+blackholeRefetchForeignRow(EState *estate,
+						   ExecRowMark *erm,
+						   Datum rowid,
+						   bool *updated)
+{
+	/*
+	 * Re-fetch one tuple from the foreign table, after locking it if
+	 * required. estate is global execution state for the query. erm is the
+	 * ExecRowMark struct describing the target foreign table and the row lock
+	 * type (if any) to acquire. rowid identifies the tuple to be fetched.
+	 * updated is an output parameter.
+	 *
+	 * This function should return a palloc'ed copy of the fetched tuple, or
+	 * NULL if the row lock couldn't be obtained. The row lock type to acquire
+	 * is defined by erm->markType, which is the value previously returned by
+	 * GetForeignRowMarkType. (ROW_MARK_REFERENCE means to just re-fetch the
+	 * tuple without acquiring any lock, and ROW_MARK_COPY will never be seen
+	 * by this routine.)
+	 *
+	 * In addition, *updated should be set to true if what was fetched was an
+	 * updated version of the tuple rather than the same version previously
+	 * obtained. (If the FDW cannot be sure about this, always returning true
+	 * is recommended.)
+	 *
+	 * Note that by default, failure to acquire a row lock should result in
+	 * raising an error; a NULL return is only appropriate if the SKIP LOCKED
+	 * option is specified by erm->waitPolicy.
+	 *
+	 * The rowid is the ctid value previously read for the row to be
+	 * re-fetched. Although the rowid value is passed as a Datum, it can
+	 * currently only be a tid. The function API is chosen in hopes that it
+	 * may be possible to allow other datatypes for row IDs in future.
+	 *
+	 * If the RefetchForeignRow pointer is set to NULL, attempts to re-fetch
+	 * rows will fail with an error message.
+	 */
+
+	elog(DEBUG1, "entering function %s", __func__);
+
+	return NULL;
+
+}
+
+
+static List *
+blackholeImportForeignSchema(ImportForeignSchemaStmt *stmt,
+							 Oid serverOid)
+{
+	/*
+	 * Obtain a list of foreign table creation commands. This function is
+	 * called when executing IMPORT FOREIGN SCHEMA, and is passed the parse
+	 * tree for that statement, as well as the OID of the foreign server to
+	 * use. It should return a list of C strings, each of which must contain a
+	 * CREATE FOREIGN TABLE command. These strings will be parsed and executed
+	 * by the core server.
+	 *
+	 * Within the ImportForeignSchemaStmt struct, remote_schema is the name of
+	 * the remote schema from which tables are to be imported. list_type
+	 * identifies how to filter table names: FDW_IMPORT_SCHEMA_ALL means that
+	 * all tables in the remote schema should be imported (in this case
+	 * table_list is empty), FDW_IMPORT_SCHEMA_LIMIT_TO means to include only
+	 * tables listed in table_list, and FDW_IMPORT_SCHEMA_EXCEPT means to
+	 * exclude the tables listed in table_list. options is a list of options
+	 * used for the import process. The meanings of the options are up to the
+	 * FDW. For example, an FDW could use an option to define whether the NOT
+	 * NULL attributes of columns should be imported. These options need not
+	 * have anything to do with those supported by the FDW as database object
+	 * options.
+	 *
+	 * The FDW may ignore the local_schema field of the
+	 * ImportForeignSchemaStmt, because the core server will automatically
+	 * insert that name into the parsed CREATE FOREIGN TABLE commands.
+	 *
+	 * The FDW does not have to concern itself with implementing the filtering
+	 * specified by list_type and table_list, either, as the core server will
+	 * automatically skip any returned commands for tables excluded according
+	 * to those options. However, it's often useful to avoid the work of
+	 * creating commands for excluded tables in the first place. The function
+	 * IsImportableForeignTable() may be useful to test whether a given
+	 * foreign-table name will pass the filter.
+	 */
+
+	elog(DEBUG1, "entering function %s", __func__);
+
+	return NULL;
+}
+
 #endif
