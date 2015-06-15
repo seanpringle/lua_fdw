@@ -145,9 +145,8 @@ static List *blackholeImportForeignSchema(ImportForeignSchemaStmt *stmt,
 /*
  * structures used by the FDW
  *
- * These next two are not actually used by blackhole, but something like this
- * will be needed by anything more complicated that does actual work.
- *
+ * These next structures are not actually used by blackhole,but something like
+ * them will be needed by anything more complicated that does actual work.
  */
 
 /*
@@ -160,14 +159,42 @@ struct blackholeFdwOption
 };
 
 /*
- * This is what will be set and stashed away in fdw_private and fetched
- * for subsequent routines.
+ * The plan state is set up in blackholeGetForeignRelSize and stashed away in
+ * baserel->fdw_private and fetched in blackholeGetForeignPaths.
  */
 typedef struct
 {
 	char	   *foo;
 	int			bar;
 } BlackholeFdwPlanState;
+
+/*
+ * The scan state is for maintaining state for a scan, eiher for a
+ * SELECT or UPDATE or DELETE.
+ *
+ * It is set up in blackholeBeginForeignScan and stashed in node->fdw_state
+ * and subsequently used in blackholeIterateForeignScan,
+ * blackholeEndForeignScan and blackholeReScanForeignScan.
+ */
+typedef struct
+{
+	char	   *baz;
+	int			blurfl;
+} BlackholeFdwScanState;
+
+/*
+ * The modify state is for maintaining state of modify operations.
+ *
+ * It is set up in blackholeBeginForeignModify and stashed in
+ * rinfo->ri_FdwState and subsequently used in blackholeExecForeignInsert,
+ * blackholeExecForeignUpdate, blackholeExecForeignDelete and
+ * blackholeEndForeignModify.
+ */
+typedef struct
+{
+	char	   *chimp;
+	int			chump;
+} BlackholeFdwModifyState;
 
 
 Datum
@@ -284,16 +311,16 @@ blackholeGetForeignRelSize(PlannerInfo *root,
 	 * can compute a better estimate of the average result row width.
 	 */
 
-	BlackholeFdwPlanState *fdw_private;
+	BlackholeFdwPlanState *plan_state;
 
 	elog(DEBUG1, "entering function %s", __func__);
 
 	baserel->rows = 0;
 
-	fdw_private = palloc0(sizeof(BlackholeFdwPlanState));
-	baserel->fdw_private = (void *) fdw_private;
+	plan_state = palloc0(sizeof(BlackholeFdwPlanState));
+	baserel->fdw_private = (void *) plan_state;
 
-	/* initialize required state in fdw_private */
+	/* initialize required state in plan_state */
 
 }
 
@@ -318,7 +345,7 @@ blackholeGetForeignPaths(PlannerInfo *root,
 	 */
 
 	/*
-	 * BlackholeFdwPlanState *fdw_private = baserel->fdw_private;
+	 * BlackholeFdwPlanState *plan_state = baserel->fdw_private;
 	 */
 
 	Cost		startup_cost,
@@ -360,6 +387,10 @@ blackholeGetForeignPlan(PlannerInfo *root,
 	 * This function must create and return a ForeignScan plan node; it's
 	 * recommended to use make_foreignscan to build the ForeignScan node.
 	 *
+	 */
+
+	/*
+	 * BlackholeFdwPlanState *plan_state = baserel->fdw_private;
 	 */
 
 	Index		scan_relid = baserel->relid;
@@ -420,6 +451,9 @@ blackholeBeginForeignScan(ForeignScanState *node,
 	 *
 	 */
 
+	BlackholeFdwScanState * scan_state = palloc0(sizeof(BlackholeFdwScanState));
+	node->fdw_state = scan_state;
+
 	elog(DEBUG1, "entering function %s", __func__);
 
 }
@@ -453,10 +487,12 @@ blackholeIterateForeignScan(ForeignScanState *node)
 	 */
 
 
-	/*
-	 * BlackholeFdwExecutionState *festate = (BlackholeFdwExecutionState *)
-	 * node->fdw_state;
+	/* ----
+	 * BlackholeFdwScanState *festate =
+	 *	 (BlackholeFdwScanState *) node->fdw_state;
+	 * ----
 	 */
+
 	TupleTableSlot *slot = node->ss.ss_ScanTupleSlot;
 
 	elog(DEBUG1, "entering function %s", __func__);
@@ -479,6 +515,12 @@ blackholeReScanForeignScan(ForeignScanState *node)
 	 * return exactly the same rows.
 	 */
 
+	/* ----
+	 * BlackholeFdwScanState *scan_state =
+	 *	 (BlackholeFdwScanState *) node->fdw_state;
+	 * ----
+	 */
+
 	elog(DEBUG1, "entering function %s", __func__);
 
 }
@@ -491,6 +533,12 @@ blackholeEndForeignScan(ForeignScanState *node)
 	 * End the scan and release resources. It is normally not important to
 	 * release palloc'd memory, but for example open files and connections to
 	 * remote servers should be cleaned up.
+	 */
+
+	/* ----
+	 * BlackholeFdwScanState *scan_state =
+	 *	 (BlackholeFdwScanState *) node->fdw_state;
+	 * ----
 	 */
 
 	elog(DEBUG1, "entering function %s", __func__);
@@ -601,6 +649,10 @@ blackholeBeginForeignModify(ModifyTableState *mtstate,
 	 * during executor startup.
 	 */
 
+	BlackholeFdwModifyState *modify_state =
+		palloc0(sizeof(BlackholeFdwModifyState));
+	rinfo->ri_FdwState = modify_state;
+
 	elog(DEBUG1, "entering function %s", __func__);
 
 }
@@ -637,6 +689,12 @@ blackholeExecForeignInsert(EState *estate,
 	 * If the ExecForeignInsert pointer is set to NULL, attempts to insert
 	 * into the foreign table will fail with an error message.
 	 *
+	 */
+
+	/* ----
+	 * BlackholeFdwModifyState *modify_state =
+	 *	 (BlackholeFdwModifyState *) rinfo->ri_FdwState;
+	 * ----
 	 */
 
 	elog(DEBUG1, "entering function %s", __func__);
@@ -678,6 +736,12 @@ blackholeExecForeignUpdate(EState *estate,
 	 *
 	 */
 
+	/* ----
+	 * BlackholeFdwModifyState *modify_state =
+	 *	 (BlackholeFdwModifyState *) rinfo->ri_FdwState;
+	 * ----
+	 */
+
 	elog(DEBUG1, "entering function %s", __func__);
 
 	return slot;
@@ -714,6 +778,12 @@ blackholeExecForeignDelete(EState *estate,
 	 * from the foreign table will fail with an error message.
 	 */
 
+	/* ----
+	 * BlackholeFdwModifyState *modify_state =
+	 *	 (BlackholeFdwModifyState *) rinfo->ri_FdwState;
+	 * ----
+	 */
+
 	elog(DEBUG1, "entering function %s", __func__);
 
 	return slot;
@@ -731,6 +801,12 @@ blackholeEndForeignModify(EState *estate,
 	 *
 	 * If the EndForeignModify pointer is set to NULL, no action is taken
 	 * during executor shutdown.
+	 */
+
+	/* ----
+	 * BlackholeFdwModifyState *modify_state =
+	 *	 (BlackholeFdwModifyState *) rinfo->ri_FdwState;
+	 * ----
 	 */
 
 	elog(DEBUG1, "entering function %s", __func__);
@@ -802,6 +878,12 @@ blackholeExplainForeignModify(ModifyTableState *mtstate,
 	 *
 	 * If the ExplainForeignModify pointer is set to NULL, no additional
 	 * information is printed during EXPLAIN.
+	 */
+
+	/* ----
+	 * BlackholeFdwModifyState *modify_state =
+	 *	 (BlackholeFdwModifyState *) rinfo->ri_FdwState;
+	 * ----
 	 */
 
 	elog(DEBUG1, "entering function %s", __func__);
