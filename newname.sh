@@ -26,10 +26,11 @@ grep --exclude-dir=.git --exclude=newname.sh -rl blackhole . | xargs sed -i -e "
 grep --exclude-dir=.git --exclude=newname.sh -rl Blackhole . | xargs sed -i -e "s/Blackhole/$Newname/g"
 
 mv blackhole_fdw.control ${newname}_fdw.control
+mv src/blackhole_fdw.c src/${newname}_fdw.c
 mv doc/blackhole_fdw.md doc/${newname}_fdw.md
 mv sql/blackhole_fdw.sql sql/${newname}_fdw.sql
-mv test/sql/blackhole_fdw.sql test/sql/${newname}_fdw.sql
-mv test/expected/blackhole_fdw.out test/expected/${newname}_fdw.out
+mv test/sql/blackhole.sql test/sql/${newname}.sql
+mv test/expected/blackhole.out test/expected/${newname}.out
 
 
 
