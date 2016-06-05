@@ -220,6 +220,8 @@ blackhole_fdw_handler(PG_FUNCTION_ARGS)
 	fdwroutine->GetForeignRelSize = blackholeGetForeignRelSize; /* S U D */
 	fdwroutine->GetForeignPaths = blackholeGetForeignPaths;		/* S U D */
 	fdwroutine->GetForeignPlan = blackholeGetForeignPlan;		/* S U D */
+#else
+	fdwroutine->PlanForeignScan = blackholePlanForeignScan;     /* S */
 #endif
 	fdwroutine->BeginForeignScan = blackholeBeginForeignScan;	/* S U D */
 	fdwroutine->IterateForeignScan = blackholeIterateForeignScan;		/* S */
@@ -425,6 +427,19 @@ blackholeGetForeignPlan(PlannerInfo *root,
 
 }
 
+#else
+
+static FdwPlan *
+blackholePlanForeignScan(Oid foreigntableid, PlannerInfo *root, RelOptInfo *baserel)
+{
+	FdwPlan    *fdwplan;
+	fdwplan = makeNode(FdwPlan);
+	fdwplan->fdw_private = NIL;
+	fdwplan->startup_cost = 0;
+	fdwplan->total_cost = 0;
+	return fdwplan;
+}
+
 #endif
 
 
@@ -488,7 +503,7 @@ blackholeIterateForeignScan(ForeignScanState *node)
 
 
 	/* ----
-	 * BlackholeFdwScanState *festate =
+	 * BlackholeFdwScanState *scan_state =
 	 *	 (BlackholeFdwScanState *) node->fdw_state;
 	 * ----
 	 */
