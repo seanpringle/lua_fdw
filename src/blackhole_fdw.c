@@ -45,6 +45,7 @@ static void blackholeGetForeignPaths(PlannerInfo *root,
 						 RelOptInfo *baserel,
 						 Oid foreigntableid);
 
+#if (PG_VERSION_NUM <= 90400)
 static ForeignScan *blackholeGetForeignPlan(PlannerInfo *root,
 						RelOptInfo *baserel,
 						Oid foreigntableid,
@@ -52,6 +53,17 @@ static ForeignScan *blackholeGetForeignPlan(PlannerInfo *root,
 						List *tlist,
 						List *scan_clauses);
 #else
+static ForeignScan *blackholeGetForeignPlan(PlannerInfo *root,
+						RelOptInfo *baserel,
+						Oid foreigntableid,
+						ForeignPath *best_path,
+						List *tlist,
+						List *scan_clauses,
+						Plan *outer_plan
+	);
+#endif
+
+#else /* 9.1 only */
 static FdwPlan *blackholePlanForeignScan(Oid foreigntableid, PlannerInfo *root, RelOptInfo *baserel);
 #endif
 
@@ -366,11 +378,12 @@ blackholeGetForeignPaths(PlannerInfo *root,
 									 total_cost,
 									 NIL,		/* no pathkeys */
 									 NULL,		/* no outer rel either */
+									 NULL,      /* no extra plan */
 									 NIL));		/* no fdw_private data */
 }
 
 
-
+#if (PG_VERSION_NUM <= 90400)
 static ForeignScan *
 blackholeGetForeignPlan(PlannerInfo *root,
 						RelOptInfo *baserel,
@@ -378,6 +391,16 @@ blackholeGetForeignPlan(PlannerInfo *root,
 						ForeignPath *best_path,
 						List *tlist,
 						List *scan_clauses)
+#else
+static ForeignScan *
+blackholeGetForeignPlan(PlannerInfo *root,
+						RelOptInfo *baserel,
+						Oid foreigntableid,
+						ForeignPath *best_path,
+						List *tlist,
+						List *scan_clauses,
+						Plan *outer_plan)
+#endif
 {
 	/*
 	 * Create a ForeignScan plan node from the selected foreign access path.
@@ -422,7 +445,9 @@ blackholeGetForeignPlan(PlannerInfo *root,
 							scan_relid,
 							NIL,	/* no expressions to evaluate */
 							NIL,	/* no private state either */
-							NIL);		/* no private state either */
+							NIL,	/* no custom tlist */
+							NIL,    /* no remote quals */
+							outer_plan);
 #endif
 
 }
