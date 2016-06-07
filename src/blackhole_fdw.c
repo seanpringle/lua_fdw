@@ -45,7 +45,7 @@ static void blackholeGetForeignPaths(PlannerInfo *root,
 						 RelOptInfo *baserel,
 						 Oid foreigntableid);
 
-#if (PG_VERSION_NUM <= 90400)
+#if (PG_VERSION_NUM < 90500)
 static ForeignScan *blackholeGetForeignPlan(PlannerInfo *root,
 						RelOptInfo *baserel,
 						Oid foreigntableid,
@@ -381,12 +381,14 @@ blackholeGetForeignPaths(PlannerInfo *root,
 									 total_cost,
 									 NIL,		/* no pathkeys */
 									 NULL,		/* no outer rel either */
+#if (PG_VERSION_NUM >= 90500)
 									 NULL,      /* no extra plan */
+#endif
 									 NIL));		/* no fdw_private data */
 }
 
 
-#if (PG_VERSION_NUM <= 90400)
+#if (PG_VERSION_NUM < 90500)
 static ForeignScan *
 blackholeGetForeignPlan(PlannerInfo *root,
 						RelOptInfo *baserel,
