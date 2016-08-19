@@ -10,9 +10,12 @@
 --
 ---------------------------------------------------------------------------
 --
+-- Reads a text file, one record with one column per line. Table column
+-- name is irrelevant.
+--
 -- CREATE FOREIGN TABLE a_table SERVER lua_fdw OPTIONS (
 --   script '/path/to/cat.lua'
---   inject 'path = [[/path/to/a.csv]]'
+--   inject 'path = [[/path/to/file.txt]]'
 -- );
 
 function EstimateRowCount ()

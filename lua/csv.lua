@@ -10,9 +10,12 @@
 --
 ---------------------------------------------------------------------------
 --
+-- Reads a CSV file, one record per line. Table column names must be a
+-- subset of CSV headers on the first line.
+--
 -- CREATE FOREIGN TABLE a_table SERVER lua_fdw OPTIONS (
 --   script '/path/to/csv.lua'
---   inject 'path = [[/path/to/a.csv]]'
+--   inject 'path = [[/path/to/file.csv]]'
 -- );
 
 -- From: http://lua-users.org/wiki/CsvUtils
