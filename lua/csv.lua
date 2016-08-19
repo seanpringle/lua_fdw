@@ -9,6 +9,11 @@
 -- Author: Sean Pringle <sean.pringle@gmail.com> (lua_fdw)
 --
 ---------------------------------------------------------------------------
+--
+-- CREATE FOREIGN TABLE a_table SERVER lua_fdw OPTIONS (
+--   script '/path/to/csv.lua'
+--   inject 'path = [[/path/to/a.csv]]'
+-- );
 
 -- From: http://lua-users.org/wiki/CsvUtils
 -- Convert from CSV string to table (converts a single line of a CSV file)

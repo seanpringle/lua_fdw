@@ -9,6 +9,11 @@
 -- Author: Sean Pringle <sean.pringle@gmail.com> (lua_fdw)
 --
 ---------------------------------------------------------------------------
+--
+-- CREATE FOREIGN TABLE a_table SERVER lua_fdw OPTIONS (
+--   script '/path/to/cat.lua'
+--   inject 'path = [[/path/to/a.csv]]'
+-- );
 
 function EstimateRowCount ()
   return 0
