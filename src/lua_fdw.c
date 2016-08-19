@@ -27,6 +27,7 @@
 #include "optimizer/restrictinfo.h"
 #include "catalog/pg_foreign_server.h"
 #include "catalog/pg_foreign_table.h"
+#include "catalog/pg_operator.h"
 #include "catalog/pg_type.h"
 #include "commands/defrem.h"
 #include "commands/tablecmds.h"
@@ -35,6 +36,7 @@
 #include "utils/memutils.h"
 #include "utils/builtins.h"
 #include "utils/syscache.h"
+#include "utils/lsyscache.h"
 #include "funcapi.h"
 
 PG_MODULE_MAGIC;
@@ -707,6 +709,10 @@ luaGetForeignPlan (
 ){
 	LuaFdwPlanState *plan_state;
 	lua_State *lua;
+	ListCell *lc;
+	RestrictInfo *rinfo;
+	OpExpr *op;
+	Node *arg1, *arg2;
 
 	/*
 	 * Create a ForeignScan plan node from the selected foreign access path.
@@ -736,6 +742,36 @@ luaGetForeignPlan (
 	lua = plan_state->lua;
 	//pfree(plan_state);
 	baserel->fdw_private = NULL;
+
+	elog(WARNING, "table: %s", get_rel_name(foreigntableid));
+
+	foreach(lc, scan_clauses)
+	{
+		rinfo = (RestrictInfo *) lfirst(lc);
+		Assert(IsA(rinfo, RestrictInfo));
+
+		if (rinfo->type == T_RestrictInfo && !rinfo->orclause && rinfo->clause->type == T_OpExpr)
+		{
+			op = (OpExpr*) rinfo->clause;
+			elog(WARNING, "clause: %d", op->xpr.type);
+
+			switch (op->opno)
+			{
+				case TextEqualOperator:
+					elog(WARNING, "TextEqualOperator, args %d", list_length(op->args));
+					if (list_length(op->args) == 2)
+					{
+						arg1 = list_nth(op->args, 0);
+						arg2 = list_nth(op->args, 1);
+						if (arg1->type == T_Var && arg2->type == T_Const)
+						{
+							elog(WARNING, "arg1: %d (%d), arg2: %d", arg1->type, ((Var*)arg1)->varattno, arg2->type);
+						}
+					}
+					break;
+			}
+		}
+	}
 
 	scan_clauses = extract_actual_clauses(scan_clauses, false);
 
@@ -900,9 +936,9 @@ luaIterateForeignScan(ForeignScanState *node)
 						typemod = ((Form_pg_type)GETSTRUCT(tuple))->typtypmod;
 
 						slot->tts_values[i] = OidFunctionCall3(typeinput, CStringGetDatum(value), ObjectIdGetDatum(InvalidOid), Int32GetDatum(typemod));
-						ReleaseSysCache(tuple);
 					}
 					lua_pop(scan_state->lua, 1);
+					ReleaseSysCache(tuple);
 				}
 				ExecStoreVirtualTuple(slot);
 			}
