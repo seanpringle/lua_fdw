@@ -47,14 +47,14 @@ The FDW looks for named Lua callback functions to be handle each stage of query 
 
 | Lua callback function | Arguments | Return | Stage | Description |
 | --- | --- | --- | --- | --- |
-| EstimateRowCount() | N/A | Integer | Planning | Approximate row count |
-| EstimateRowWidth() | N/A | Integer (bytes) | Planning | Average row width |
-| EstimateStartupCost() | N/A | Double | Planning | See EXPLAIN |
-| EstimateTotalCost() | N/A | Double | Planning | See EXPLAIN |
-| ScanStart() | Table (column names) | N/A | Table Scan | Prepare for a table scan, open any resources, files, connections etc, but don't return any data yet |
-| ScanIterate() | N/A | Table (row) | Table Scan | Return the next available row, keys = column names, values = anything scalar. Missing columns are assumed to be NULL |
-| ScanRestart() | N/A | N/A | Table Scan | Restart the current table scan from the beginning |
-| ScanEnd() | N/A | N/A | Table Scan | Close/free any resources used for the current table scan |
+| `EstimateRowCount()` | N/A | Integer | Planning | Approximate row count |
+| `EstimateRowWidth()` | N/A | Integer (bytes) | Planning | Average row width |
+| `EstimateStartupCost()` | N/A | Double | Planning | See EXPLAIN |
+| `EstimateTotalCost()` | N/A | Double | Planning | See EXPLAIN |
+| `ScanStart()` | Table (column names) | N/A | Table Scan | Prepare for a table scan, open any resources, files, connections etc, but don't return any data yet |
+| `ScanIterate()` | N/A | Table (row) | Table Scan | Return the next available row, keys = column names, values = anything scalar. Missing columns are assumed to be NULL |
+| `ScanRestart()` | N/A | N/A | Table Scan | Restart the current table scan from the beginning |
+| `ScanEnd()` | N/A | N/A | Table Scan | Close/free any resources used for the current table scan |
 
 ## Table OPTIONS
 
