@@ -10,15 +10,14 @@ Write PostgreSQL foreign data wrappers in Lua. Currently read-only.
 ```lua
 -- hello_world.lua
 
-function ScanStart (cols)
-  rows = 0
-  field = cols[1]
+function ScanStart ()
+  done = false
 end
 
 function ScanIterate ()
-  if rows == 0 then
-    rows = rows + 1
-    return { [field] = "hello world" }
+  if not done then
+    done = true
+    return { data = "hello world" }
   end
 end
 

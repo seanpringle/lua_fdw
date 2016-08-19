@@ -35,19 +35,23 @@ end
 
 function ScanStart (cols)
   line = 0
-  field = cols[1]
   file, msg = io.open(path)
 
   if file == nil then
-    ereport(ERROR, msg)
+    fdw.ereport(fdw.ERROR, msg)
   end
 end
 
 function ScanIterate ()
+  local row = nil
   local line = file:read()
   if type(line) == "string" then
-    return { [field] = line }
+    row = { }
+    for field, data_type in ipairs(fdw.columns) do
+      row[field] = line
+    end
   end
+  return row
 end
 
 function ScanRestart ()

@@ -70,13 +70,11 @@ function EstimateTotalCost ()
   return EstimateRowCount()
 end
 
-function ScanStart (cols)
-  fields = cols
-  ereport(WARNING, field)
+function ScanStart ()
   file, msg = io.open(path)
 
   if file == nil then
-    ereport(ERROR, msg)
+    fdw.ereport(fdw.ERROR, msg)
   end
 
   headers = fromCSV(file:read())
@@ -88,7 +86,7 @@ function ScanIterate ()
   if type(line) == "string" then
     row = { }
     local csv = fromCSV(line)
-    for _, field in ipairs(fields) do
+    for field, data_type in ipairs(fdw.columns) do
       row[field] = getCSV(csv, headers, field)
     end
   end

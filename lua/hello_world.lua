@@ -26,15 +26,18 @@ function EstimateTotalCost ()
   return EstimateRowCount()
 end
 
-function ScanStart (cols)
-  rows = 0
-  field = cols[1]
+function ScanStart ()
+  done = false
 end
 
 function ScanIterate ()
-  if rows == 0 then
-    rows = rows + 1
-    return { [field] = "hello world" }
+  if not done then
+    done = true
+    local row = { }
+    for column, data_type in pairs(fdw.columns) do
+      row[column] = data_type == "text" and "hello world" or nil
+    end
+    return row
   end
 end
 

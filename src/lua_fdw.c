@@ -60,10 +60,9 @@ _PG_fini(
 	void
 );
 
-char*
-pstrf (
-	char *pattern,
-	...
+const char*
+get_pg_type_str (
+	Oid id
 );
 
 const char*
@@ -332,6 +331,16 @@ static const struct luaFdwOption valid_options[] = {
 };
 
 const char*
+get_pg_type_str (Oid id)
+{
+	switch (id)
+	{
+		default:
+			return "text";
+	}
+}
+
+const char*
 lua_popstring (lua_State *lua)
 {
 	const char *str = lua_tostring(lua, -1);
@@ -357,33 +366,61 @@ lua_start (const char *script, const char *inject)
 
 	//elog(WARNING, "function %s %lx", __func__, (uint64_t)lua);
 
-	lua_pushcfunction(lua, lua_ereport);
-	lua_setglobal(lua, "ereport");
+	lua_createtable(lua, 0, 0);
 
+	lua_pushstring(lua, "ereport");
+	lua_pushcfunction(lua, lua_ereport);
+	lua_settable(lua, -3);
+
+	lua_pushstring(lua, "DEBUG5");
 	lua_pushnumber(lua, DEBUG5);
-	lua_setglobal(lua, "DEBUG5");
+	lua_settable(lua, -3);
+
+	lua_pushstring(lua, "DEBUG4");
 	lua_pushnumber(lua, DEBUG4);
-	lua_setglobal(lua, "DEBUG4");
+	lua_settable(lua, -3);
+
+	lua_pushstring(lua, "DEBUG3");
 	lua_pushnumber(lua, DEBUG3);
-	lua_setglobal(lua, "DEBUG3");
+	lua_settable(lua, -3);
+
+	lua_pushstring(lua, "DEBUG2");
 	lua_pushnumber(lua, DEBUG2);
-	lua_setglobal(lua, "DEBUG2");
+	lua_settable(lua, -3);
+
+	lua_pushstring(lua, "DEBUG1");
 	lua_pushnumber(lua, DEBUG1);
-	lua_setglobal(lua, "DEBUG1");
+	lua_settable(lua, -3);
+
+	lua_pushstring(lua, "INFO");
 	lua_pushnumber(lua, INFO);
-	lua_setglobal(lua, "INFO");
+	lua_settable(lua, -3);
+
+	lua_pushstring(lua, "NOTICE");
 	lua_pushnumber(lua, NOTICE);
-	lua_setglobal(lua, "NOTICE");
+	lua_settable(lua, -3);
+
+	lua_pushstring(lua, "WARNING");
 	lua_pushnumber(lua, WARNING);
-	lua_setglobal(lua, "WARNING");
+	lua_settable(lua, -3);
+
+	lua_pushstring(lua, "ERROR");
 	lua_pushnumber(lua, ERROR);
-	lua_setglobal(lua, "ERROR");
+	lua_settable(lua, -3);
+
+	lua_pushstring(lua, "LOG");
 	lua_pushnumber(lua, LOG);
-	lua_setglobal(lua, "LOG");
+	lua_settable(lua, -3);
+
+	lua_pushstring(lua, "FATAL");
 	lua_pushnumber(lua, FATAL);
-	lua_setglobal(lua, "FATAL");
+	lua_settable(lua, -3);
+
+	lua_pushstring(lua, "PANIC");
 	lua_pushnumber(lua, PANIC);
-	lua_setglobal(lua, "PANIC");
+	lua_settable(lua, -3);
+
+	lua_setglobal(lua, "fdw");
 
 	if ((script && luaL_dofile(lua, script) != 0) || (inject && luaL_dostring(lua, inject) != 0))
 		ereport(ERROR, (errcode(ERRCODE_FDW_ERROR), errmsg("lua_fdw lua error: %s", lua_tostring(lua, -1))));
@@ -548,8 +585,12 @@ luaGetForeignRelSize (PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid
 	LuaFdwPlanState *plan_state;
 	ForeignTable *table;
 	ListCell *cell;
+	Relation rel;
+	TupleDesc desc;
 	const char *script = NULL;
 	const char *inject = NULL;
+	lua_State *lua;
+	int i;
 
 	//elog(WARNING, "function %s", __func__);
 
@@ -570,6 +611,9 @@ luaGetForeignRelSize (PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid
 	 * can compute a better estimate of the average result row width.
 	 */
 
+	rel = heap_open(foreigntableid, AccessShareLock);
+	desc = RelationGetDescr(rel);
+
 	table = GetForeignTable(foreigntableid);
 
 	foreach(cell, table->options)
@@ -589,37 +633,65 @@ luaGetForeignRelSize (PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid
 
 	/* initialize required state in plan_state */
 
-	plan_state->lua = lua_start(script, inject);
+	lua = plan_state->lua = lua_start(script, inject);
 
-	lua_getglobal(plan_state->lua, "EstimateRowCount");
+	lua_getglobal(lua, "fdw");
 
-	if (lua_isfunction(plan_state->lua, -1))
+	lua_pushstring(lua, "table");
+	lua_pushstring(lua, get_rel_name(foreigntableid));
+	lua_settable(lua, -3); // table
+
+	lua_pushstring(lua, "columns");
+	lua_createtable(lua, 0, 0);
+	for (i = 0; i < desc->natts; i++)
 	{
-		if (lua_pcall(plan_state->lua, 0, 1, 0) != 0)
-			ereport(ERROR, (errcode(ERRCODE_FDW_ERROR), errmsg("lua_fdw lua error: %s", lua_tostring(plan_state->lua, -1))));
+		lua_pushstring(lua, desc->attrs[i]->attname.data);
+		switch (desc->attrs[i]->atttypid)
+		{
+			case INT4OID:
+			case INT8OID:
+				lua_pushstring(lua, "integer");
+				break;
+			default:
+				lua_pushstring(lua, "text");
+		}
+		lua_settable(lua, -3);
+	}
+	lua_settable(lua, -3); // columns
+
+	lua_pop(lua, 1); // fdw
+
+	lua_getglobal(lua, "EstimateRowCount");
+
+	if (lua_isfunction(lua, -1))
+	{
+		if (lua_pcall(lua, 0, 1, 0) != 0)
+			ereport(ERROR, (errcode(ERRCODE_FDW_ERROR), errmsg("lua_fdw lua error: %s", lua_tostring(lua, -1))));
 		else
 		{
-			if (lua_isnumber(plan_state->lua, -1))
-				baserel->rows = lua_tonumber(plan_state->lua, -1);
+			if (lua_isnumber(lua, -1))
+				baserel->rows = lua_tonumber(lua, -1);
 
-			lua_pop(plan_state->lua, 1);
+			lua_pop(lua, 1);
 		}
 	}
 
-	lua_getglobal(plan_state->lua, "EstimateRowWidth");
+	lua_getglobal(lua, "EstimateRowWidth");
 
-	if (lua_isfunction(plan_state->lua, -1))
+	if (lua_isfunction(lua, -1))
 	{
-		if (lua_pcall(plan_state->lua, 0, 1, 0) != 0)
-			ereport(ERROR, (errcode(ERRCODE_FDW_ERROR), errmsg("lua_fdw lua error: %s", lua_tostring(plan_state->lua, -1))));
+		if (lua_pcall(lua, 0, 1, 0) != 0)
+			ereport(ERROR, (errcode(ERRCODE_FDW_ERROR), errmsg("lua_fdw lua error: %s", lua_tostring(lua, -1))));
 		else
 		{
-			if (lua_isnumber(plan_state->lua, -1))
-				baserel->width = lua_tonumber(plan_state->lua, -1);
+			if (lua_isnumber(lua, -1))
+				baserel->width = lua_tonumber(lua, -1);
 
-			lua_pop(plan_state->lua, 1);
+			lua_pop(lua, 1);
 		}
 	}
+
+	heap_close(rel, AccessShareLock);
 }
 
 static void
@@ -664,6 +736,10 @@ luaGetForeignPaths (PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid)
 			lua_pop(plan_state->lua, 1);
 		}
 	}
+	else
+	{
+		lua_pop(plan_state->lua, 1);
+	}
 
 	lua_getglobal(plan_state->lua, "EstimateTotalCost");
 
@@ -678,6 +754,10 @@ luaGetForeignPaths (PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid)
 
 			lua_pop(plan_state->lua, 1);
 		}
+	}
+	else
+	{
+		lua_pop(plan_state->lua, 1);
 	}
 
 	/* Create a ForeignPath node and add it as only possible path */
@@ -713,6 +793,12 @@ luaGetForeignPlan (
 	RestrictInfo *rinfo;
 	OpExpr *op;
 	Node *arg1, *arg2;
+	Relation rel;
+	TupleDesc desc;
+	int attno;
+	int clause;
+	Oid id;
+	char scratch[50];
 
 	/*
 	 * Create a ForeignScan plan node from the selected foreign access path.
@@ -743,7 +829,13 @@ luaGetForeignPlan (
 	//pfree(plan_state);
 	baserel->fdw_private = NULL;
 
-	elog(WARNING, "table: %s", get_rel_name(foreigntableid));
+	rel = heap_open(foreigntableid, AccessShareLock);
+	desc = RelationGetDescr(rel);
+
+	lua_getglobal(lua, "fdw");
+	lua_pushstring(lua, "clauses");
+	lua_createtable(lua, 0, 0);
+	clause = 1;
 
 	foreach(lc, scan_clauses)
 	{
@@ -753,25 +845,80 @@ luaGetForeignPlan (
 		if (rinfo->type == T_RestrictInfo && !rinfo->orclause && rinfo->clause->type == T_OpExpr)
 		{
 			op = (OpExpr*) rinfo->clause;
-			elog(WARNING, "clause: %d", op->xpr.type);
+			elog(WARNING, "op: %d", op->opno);
 
 			switch (op->opno)
 			{
+				case 15: // int48eq
+				case Int4EqualOperator:
 				case TextEqualOperator:
-					elog(WARNING, "TextEqualOperator, args %d", list_length(op->args));
+
 					if (list_length(op->args) == 2)
 					{
 						arg1 = list_nth(op->args, 0);
 						arg2 = list_nth(op->args, 1);
+
 						if (arg1->type == T_Var && arg2->type == T_Const)
 						{
-							elog(WARNING, "arg1: %d (%d), arg2: %d", arg1->type, ((Var*)arg1)->varattno, arg2->type);
+							id = ((Const*)arg2)->consttype;
+							attno = ((Var*)arg1)->varattno-1;
+
+							if (id == TEXTOID || id == INT4OID || id == INT8OID)
+							{
+								lua_pushnumber(lua, clause++);
+								lua_createtable(lua, 0, 0);
+
+								lua_pushstring(lua, "column");
+								lua_pushstring(lua, desc->attrs[attno]->attname.data);
+								lua_settable(lua, -3);
+
+								lua_pushstring(lua, "operator");
+								lua_pushstring(lua, "equal");
+								lua_settable(lua, -3);
+
+								lua_pushstring(lua, "type");
+
+								switch (id)
+								{
+									case INT4OID:
+									case INT8OID:
+										lua_pushstring(lua, "integer");
+										break;
+									default:
+										lua_pushstring(lua, "text");
+								}
+								lua_settable(lua, -3);
+
+								lua_pushstring(lua, "constant");
+
+								switch (id)
+								{
+									case INT4OID:
+										snprintf(scratch, sizeof(scratch), "%d", DatumGetInt32(((Const*)arg2)->constvalue));
+										lua_pushstring(lua, scratch);
+										break;
+									case INT8OID:
+										snprintf(scratch, sizeof(scratch), "%ld", DatumGetInt64(((Const*)arg2)->constvalue));
+										lua_pushstring(lua, scratch);
+										break;
+									default:
+										lua_pushstring(lua, DatumGetCString(DirectFunctionCall1(textout, ((Const*)arg2)->constvalue)));
+								}
+
+								lua_settable(lua, -3);
+								lua_settable(lua, -3); // #clause
+							}
 						}
 					}
 					break;
 			}
 		}
 	}
+
+	lua_settable(lua, -3); // clauses
+	lua_pop(lua, 1);
+
+	heap_close(rel, AccessShareLock);
 
 	scan_clauses = extract_actual_clauses(scan_clauses, false);
 
@@ -790,14 +937,7 @@ static void
 luaBeginForeignScan (ForeignScanState *node, int eflags)
 {
 	ForeignScan *plan = (ForeignScan *) node->ss.ps.plan;
-	TupleTableSlot *slot = node->ss.ss_ScanTupleSlot;
-	TupleDesc desc = slot->tts_tupleDescriptor;
 	LuaFdwScanState *scan_state;
-	int i;
-	//ForeignTable *table;
-	//ListCell *cell;
-	//const char *script = NULL;
-	//const char *inject = NULL;
 
 	/*
 	 * Begin executing a foreign scan. This is called during executor startup.
@@ -828,18 +968,7 @@ luaBeginForeignScan (ForeignScanState *node, int eflags)
 
 	if (lua_isfunction(scan_state->lua, -1))
 	{
-		lua_createtable(scan_state->lua, 0, 0);
-
-		for (i = 0; i < desc->natts; i++)
-		{
-			lua_pushnumber(scan_state->lua, i+1);
-			lua_pushstring(scan_state->lua, desc->attrs[i]->attname.data);
-			lua_settable(scan_state->lua, -3);
-		}
-
-		lua_pushnumber(scan_state->lua, eflags);
-
-		if (lua_pcall(scan_state->lua, 2, 0, 0) != 0)
+		if (lua_pcall(scan_state->lua, 0, 0, 0) != 0)
 			ereport(ERROR, (errcode(ERRCODE_FDW_ERROR), errmsg("lua_fdw lua error: %s", lua_tostring(scan_state->lua, -1))));
 	}
 	else
@@ -1355,7 +1484,7 @@ luaExplainForeignScan (ForeignScanState *node, struct ExplainState * es)
 		else
 		{
 			if (lua_isstring(scan_state->lua, -1))
-				ExplainPropertyText("lua_fdw", lua_popstring(scan_state->lua), es);
+				ExplainPropertyText("lua_fdw", lua_tostring(scan_state->lua, -1), es);
 
 			lua_pop(scan_state->lua, 1);
 		}
@@ -1391,7 +1520,7 @@ luaExplainForeignModify (ModifyTableState *mtstate, ResultRelInfo *rinfo, List *
 		else
 		{
 			if (lua_isstring(modify_state->lua, -1))
-				ExplainPropertyText("lua_fdw", lua_popstring(modify_state->lua), es);
+				ExplainPropertyText("lua_fdw", lua_tostring(modify_state->lua, -1), es);
 
 			lua_pop(modify_state->lua, 1);
 		}
