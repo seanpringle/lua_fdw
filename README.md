@@ -1,18 +1,70 @@
-# Blackhole Foreign Data Wrapper for PostgreSQL
+# Lua Foreign Data Wrapper for PostgreSQL
 
-This skeleton FDW simply throws away any data it receives. Updates and deletes
-are no-ops, since there is no data to update or delete. Selecting data from it 
-returns an empty resultset, of course.
+Based on the Blackhole Foreign Data Wrapper by Andrew Dunstan:
+https://bitbucket.org/adunstan/blackhole_fdw
 
-This code as partly written as a bit of fun for pgCon 2013, and partly so there
-would be a skeleton FDW that could be used as the basis for creating another
-FDW. Simply take this code, globally replace the word "blackhole" (preserving
-case) with your FDW's prefix and you will have a new functional FDW you can
-start adding data handling features to.
+Write PostgreSQL foreign data wrappers in Lua. Currently read-only.
 
-The code includes the new new data modifying stuff as well as the pre-9.3 data
-scanning functionality.
+## Hello World
 
-The comments in the functions come from the draft 9.3 docs as at the time of
-writing (May 26 2013). That saves you from having to go back and forth
-between the docs and the code.
+```lua
+-- hello_world.lua
+
+function ScanStart (cols)
+  rows = 0
+  field = cols[1]
+end
+
+function ScanIterate ()
+  if rows == 0 then
+    rows = rows + 1
+    return { [field] = "hello world" }
+  end
+end
+
+function ScanEnd ()
+  -- noop
+end
+```
+
+```SQL
+CREATE EXTENSION lua_fdw;
+CREATE SERVER lua_srv FOREIGN DATA WRAPPER lua_fdw;
+CREATE FOREIGN TABLE lua_test (data text) SERVER lua_srv OPTIONS (script '/path/to/hello_world.lua');
+SELECT * FROM lua_test;
+```
+
+```
+    data
+-------------
+ hello world
+(1 row)
+```
+
+## Lua API
+
+The FDW looks for named Lua callback functions to be handle each stage of query execution. Missing callbacks are skipped.
+
+| Lua callback function | Arguments | Return | Stage | Description |
+| --- | --- | --- | --- | --- |
+| EstimateRowCount() | N/A | Integer | Planning | Approximate row count |
+| EstimateRowWidth() | N/A | Integer (bytes) | Planning | Average row width |
+| EstimateStartupCost() | N/A | Double | Planning | See EXPLAIN |
+| EstimateTotalCost() | N/A | Double | Planning | See EXPLAIN |
+| ScanStart() | Table (column names) | N/A | Table Scan | Prepare for a table scan, open any resources, files, connections etc, but don't return any data yet |
+| ScanIterate() | N/A | Table (row) | Table Scan | Return the next available row, keys = column names, values = anything scalar. Missing columns are assumed to be NULL |
+| ScanRestart() | N/A | N/A | Table Scan | Restart the current table scan from the beginning |
+| ScanEnd() | N/A | N/A | Table Scan | Close/free any resources used for the current table scan |
+
+## Table OPTIONS
+
+```
+FOREIGN TABLE ... OPTIONS (
+  script '/path/to/hello_world.lua'
+  inject '... lua code ...'
+);
+```
+| Option | Description |
+| --- | --- |
+| script | Path to the Lua script |
+| inject | Fragment of Lua code to execute after the script is loaded. Useful for setting globals. May be replaced with a constructor callback. |

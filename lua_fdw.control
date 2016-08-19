@@ -1,0 +1,5 @@
+# lua FDW
+comment = 'Lua Foreign Data Wrapper'
+default_version = '0.0.1'
+module_pathname = '$libdir/lua_fdw'
+relocatable = true

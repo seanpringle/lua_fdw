@@ -1,20 +1,17 @@
 ##############################################################################
 #
-# Blackhole Foreign Data Wrapper for PostgreSQL
-# 
-# Copyright (c) 2013 Andrew Dunstan
-# 
+# Lua Foreign Data Wrapper for PostgreSQL
+#
+# Copyright (c) 2016 Sean Pringle (lua_fdw)
+#
 # This software is released under the PostgreSQL Licence
-# 
-# Author: Andrew Dunstan <andrew@dunslane.net>
-# 
-# IDENTIFICATION
-#        blackhole_fdw/Makefile
-# 
+#
+# Author: Andrew Dunstan <andrew@dunslane.net> (blackhole_fdw)
+# Author: Sean Pringle <sean.pringle@gmail.com> (lua_fdw)
+#
 ##############################################################################
 
-
-EXTENSION    = blackhole_fdw
+EXTENSION    = lua_fdw
 EXTVERSION   = $(shell grep default_version $(EXTENSION).control | sed -e "s/default_version[[:space:]]*=[[:space:]]*'\([^']*\)'/\1/")
 
 DATA         = $(filter-out $(wildcard sql/*--*.sql),$(wildcard sql/*.sql))
@@ -27,6 +24,9 @@ REGRESS_OPTS = --inputdir=test --outputdir=test \
 MODULE_big      = $(EXTENSION)
 OBJS         =  $(patsubst %.c,%.o,$(wildcard src/*.c))
 PG_CONFIG    = pg_config
+PG_CPPFLAGS  = -I/usr/include/lua5.2
+PG_LIBS      = -llua5.2
+SHLIB_LINK   = -llua5.2
 
 all: sql/$(EXTENSION)--$(EXTVERSION).sql
 
