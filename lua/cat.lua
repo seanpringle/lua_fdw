@@ -10,8 +10,7 @@
 --
 ---------------------------------------------------------------------------
 --
--- Reads a text file, one record with one column per line. Table column
--- name is irrelevant.
+-- Reads a text file, one record per line. Table column name is irrelevant.
 --
 -- CREATE FOREIGN TABLE a_table SERVER lua_fdw OPTIONS (
 --   script '/path/to/cat.lua'
