@@ -37,6 +37,7 @@
 #include "utils/builtins.h"
 #include "utils/syscache.h"
 #include "utils/lsyscache.h"
+#include "utils/timestamp.h"
 #include "funcapi.h"
 
 PG_MODULE_MAGIC;
@@ -797,6 +798,7 @@ luaGetForeignPlan (
 	TupleDesc desc;
 	int attno;
 	int clause;
+	int is_eq, is_like, is_lt, is_gt;
 	Oid id;
 	char scratch[50];
 
@@ -847,70 +849,94 @@ luaGetForeignPlan (
 			op = (OpExpr*) rinfo->clause;
 			elog(WARNING, "op: %d", op->opno);
 
-			switch (op->opno)
+			if (list_length(op->args) == 2)
 			{
-				case 15: // int48eq
-				case Int4EqualOperator:
-				case TextEqualOperator:
+				arg1 = list_nth(op->args, 0);
+				arg2 = list_nth(op->args, 1);
+				elog(WARNING, "arg1: %d arg2: %d", arg1->type, arg2->type);
 
-					if (list_length(op->args) == 2)
+				if (arg1->type == T_Var && arg2->type == T_Const)
+				{
+					id = ((Const*)arg2)->consttype;
+					attno = ((Var*)arg1)->varattno-1;
+					elog(WARNING, "id: %d", id);
+
+					is_eq =
+						op->opno == 15 // int48eq
+						|| op->opno == Int4EqualOperator
+						|| op->opno == TextEqualOperator
+						|| op->opno == 2060 // timestamp_eq
+					;
+
+					is_like =
+						op->opno == OID_TEXT_LIKE_OP
+					;
+
+					is_gt = 0;
+
+					is_lt =
+						op->opno == Int4LessOperator
+						|| op->opno == Int8LessOperator
+						|| op->opno == 2062 // timestamp_lt
+					;
+
+					if ((is_eq || is_like) && (id == TEXTOID || id == INT4OID || id == INT8OID || id == TIMESTAMPOID))
 					{
-						arg1 = list_nth(op->args, 0);
-						arg2 = list_nth(op->args, 1);
+						lua_pushnumber(lua, clause++);
+						lua_createtable(lua, 0, 0);
 
-						if (arg1->type == T_Var && arg2->type == T_Const)
+						lua_pushstring(lua, "column");
+						lua_pushstring(lua, desc->attrs[attno]->attname.data);
+						lua_settable(lua, -3);
+
+						lua_pushstring(lua, "operator");
+						lua_pushstring(lua,
+							is_like ? "like":
+							is_lt   ? "lt":
+							is_gt   ? "gt":
+							"eq"
+						);
+						lua_settable(lua, -3);
+
+						lua_pushstring(lua, "type");
+
+						switch (id)
 						{
-							id = ((Const*)arg2)->consttype;
-							attno = ((Var*)arg1)->varattno-1;
-
-							if (id == TEXTOID || id == INT4OID || id == INT8OID)
-							{
-								lua_pushnumber(lua, clause++);
-								lua_createtable(lua, 0, 0);
-
-								lua_pushstring(lua, "column");
-								lua_pushstring(lua, desc->attrs[attno]->attname.data);
-								lua_settable(lua, -3);
-
-								lua_pushstring(lua, "operator");
-								lua_pushstring(lua, "equal");
-								lua_settable(lua, -3);
-
-								lua_pushstring(lua, "type");
-
-								switch (id)
-								{
-									case INT4OID:
-									case INT8OID:
-										lua_pushstring(lua, "integer");
-										break;
-									default:
-										lua_pushstring(lua, "text");
-								}
-								lua_settable(lua, -3);
-
-								lua_pushstring(lua, "constant");
-
-								switch (id)
-								{
-									case INT4OID:
-										snprintf(scratch, sizeof(scratch), "%d", DatumGetInt32(((Const*)arg2)->constvalue));
-										lua_pushstring(lua, scratch);
-										break;
-									case INT8OID:
-										snprintf(scratch, sizeof(scratch), "%ld", DatumGetInt64(((Const*)arg2)->constvalue));
-										lua_pushstring(lua, scratch);
-										break;
-									default:
-										lua_pushstring(lua, DatumGetCString(DirectFunctionCall1(textout, ((Const*)arg2)->constvalue)));
-								}
-
-								lua_settable(lua, -3);
-								lua_settable(lua, -3); // #clause
-							}
+							case INT4OID:
+							case INT8OID:
+								lua_pushstring(lua, "integer");
+								break;
+							case TIMESTAMPOID:
+								lua_pushstring(lua, "timestamp");
+								break;
+							default:
+								lua_pushstring(lua, "text");
 						}
+						lua_settable(lua, -3);
+
+						lua_pushstring(lua, "constant");
+
+						switch (id)
+						{
+							case INT4OID:
+								snprintf(scratch, sizeof(scratch), "%d", DatumGetInt32(((Const*)arg2)->constvalue));
+								lua_pushstring(lua, scratch);
+								break;
+							case INT8OID:
+								snprintf(scratch, sizeof(scratch), "%ld", DatumGetInt64(((Const*)arg2)->constvalue));
+								lua_pushstring(lua, scratch);
+								break;
+							case TIMESTAMPOID:
+								lua_pushstring(lua, DatumGetCString(DirectFunctionCall1(timestamp_out, ((Const*)arg2)->constvalue)));
+								break;
+							default:
+								lua_pushstring(lua, DatumGetCString(DirectFunctionCall1(textout, ((Const*)arg2)->constvalue)));
+						}
+
+						lua_settable(lua, -3);
+						lua_settable(lua, -3); // #clause
 					}
-					break;
+				}
 			}
 		}
 	}

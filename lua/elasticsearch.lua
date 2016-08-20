@@ -13,6 +13,7 @@
 json = require('json')
 elasticsearch = require("elasticsearch")
 
+remap = { }
 proto = "http"
 host = "ne4-stp900a"
 port = 9200
@@ -34,9 +35,8 @@ function EstimateTotalCost ()
   return EstimateRowCount()
 end
 
-function ScanStart (cols)
+function ScanStart ()
   rows = 0
-  field = cols[1]
 
   client = elasticsearch.client({
     hosts = {
@@ -48,6 +48,24 @@ function ScanStart (cols)
     },
   })
 
+  filters = {
+    { range = { ["@timestamp"] = { gte = "2016-08-01" }}},
+  }
+
+  for i, clause in ipairs(fdw.clauses) do
+    local field = remap[clause.column] or clause.column
+    if clause.operator == "like" then
+      local value = clause.constant:gsub("%%", "")
+      table.insert(filters, { match = { [field] = value }})
+    end
+    if clause.operator == "eq" then
+      table.insert(filters, { term = { [field] = clause.constant }})
+    end
+  end
+
+  fdw.ereport(fdw.WARNING, json.encode(fdw.clauses))
+  fdw.ereport(fdw.WARNING, json.encode(filters))
+
   data, err = client:search({
     index = index,
     search_type = "scan",
@@ -55,24 +73,23 @@ function ScanStart (cols)
     body = {
       query = {
         bool = {
-          filter = {
-            { range = { ["@timestamp"] = { gte = "2016-08-01" }}},
-            { match = { stream = "sshd" }},
-            { match = { host = "qt6" }},
-            { match = { content = "stp900" }},
-          }
+          filter = filters,
         }
       }
     }
   })
 
-  scroll_id = data["_scroll_id"]
-  data = { }
+  if data == nil then
+    fdw.ereport(fdw.ERROR, err)
+  else
+    scroll_id = data["_scroll_id"]
+    data = { }
+  end
 end
 
 function ScanIterate ()
 
-  if #data == 0 then
+  if #data == 0 and scroll_id then
 
     local chunk, err = client:scroll({
       scroll_id = scroll_id,
@@ -86,12 +103,18 @@ function ScanIterate ()
 
   if #data > 0 then
     rows = rows + 1
-    return { [field] = json.encode(table.remove(data, #data)) }
+    local cell = table.remove(data, #data)
+    local row = { }
+    for column, data_type in pairs(fdw.columns) do
+      local field = remap[column] or column
+      row[column] = cell["_source"][field]
+    end
+    return row
   end
 end
 
 function ScanRestart ()
-  ScanStart({ field })
+  ScanStart()
 end
 
 function ScanEnd ()
