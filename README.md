@@ -92,9 +92,9 @@ Each clause is split into a table:
 
 ```lua
 {
-  column => "email",
-  operator => "eq",
-  type => "text",
-  constant => "me@example.com",
+  column = "email",
+  operator = "eq",
+  type = "text",
+  constant = "me@example.com",
 }
 ```
