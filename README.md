@@ -70,7 +70,9 @@ A global Lua table called `fdw` exposes information about the table and query. S
 ```
 FOREIGN TABLE ... OPTIONS (
   script '/path/to/hello_world.lua'
-  inject '... lua code ...'
+  inject '... lua code ...',
+  lua_path '/custom/path/?.lua',
+  lua_cpath '/custom/path/?.so'
 );
 ```
 
@@ -78,6 +80,8 @@ FOREIGN TABLE ... OPTIONS (
 | --- | --- |
 | script | Path to the Lua script |
 | inject | Fragment of Lua code to execute after the script is loaded. Useful for setting globals. May be replaced with a constructor callback. |
+| lua_path | Append to default LUA_PATH |
+| lua_cpath | Append to default LUA_CPATH |
 
 ## Scan Clauses (condition pushdown)
 
