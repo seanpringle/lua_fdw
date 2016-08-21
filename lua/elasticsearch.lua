@@ -13,7 +13,7 @@
 -- https://luarocks.org/#quick-start
 -- https://github.com/DhavalKapil/elasticsearch-lua
 
---json = require('json')
+json = require('cjson')
 elasticsearch = require("elasticsearch")
 
 remap = { }
@@ -77,7 +77,7 @@ function ScanStart ()
   end
 
 --  fdw.ereport(fdw.WARNING, json.encode(fdw.clauses))
---  fdw.ereport(fdw.WARNING, json.encode(filters))
+  fdw.ereport(fdw.INFO, json.encode(filters))
 
   data, err = client:search({
     index = index,
