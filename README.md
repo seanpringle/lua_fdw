@@ -61,8 +61,8 @@ A global table called `fdw` exposes information about the table and query. Some 
 | --- | --- | --- |
 | `fdw.table` | string | Foreign table name |
 | `fdw.columns` | table | { [column] = 'type', ... } |
-| `fdw.clauses` | table | List of simple WHERE clauses: "column" eq/ne/lt/gt/let/gte 'constant' |
-| `fdw.ereport()` | function | PostgreSQL error messages, eg fdw.ereport(fdw.WARNING, "some text") |
+| `fdw.clauses` | table | List of simple WHERE clauses: *"column" (operator) 'constant'* |
+| `fdw.ereport()` | function | PostgreSQL error messages, eg `fdw.ereport(fdw.WARNING, "some text")` |
 | `fdw.WARNING` | number | PostgreSQL error level. Also DEBUG5, DEBUG4, DEBUG3, DEBUG2, DEBUG1, INFO, NOTICE, ERROR, LOG, FATAL, and PANIC |
 
 ## Table OPTIONS
