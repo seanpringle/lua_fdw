@@ -10,7 +10,7 @@
 --
 ---------------------------------------------------------------------------
 
-json = require('json')
+--json = require('json')
 elasticsearch = require("elasticsearch")
 
 remap = { }
@@ -73,8 +73,8 @@ function ScanStart ()
     end
   end
 
-  fdw.ereport(fdw.WARNING, json.encode(fdw.clauses))
-  fdw.ereport(fdw.WARNING, json.encode(filters))
+--  fdw.ereport(fdw.WARNING, json.encode(fdw.clauses))
+--  fdw.ereport(fdw.WARNING, json.encode(filters))
 
   data, err = client:search({
     index = index,
