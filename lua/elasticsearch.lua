@@ -128,5 +128,7 @@ function ScanRestart ()
 end
 
 function ScanEnd ()
-
+  client:clearScroll({
+    scroll_id = scroll_id
+  })
 end
