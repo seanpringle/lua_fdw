@@ -370,7 +370,7 @@ lua_start (const char *script, const char *inject, const char *lua_path)
 
 	if (lua_path)
 	{
-		snprintf(scratch, 1024, "package.path = '%s;' .. package.path", lua_path);
+		snprintf(scratch, 1024, "package.path = package.path .. ';%s'", lua_path);
 		if (luaL_dostring(lua, scratch) != 0)
 			ereport(ERROR, (errcode(ERRCODE_FDW_ERROR), errmsg("lua_fdw lua error: %s", lua_tostring(lua, -1))));
 	}
