@@ -80,7 +80,8 @@ lua_State*
 lua_start (
 	const char *script,
 	const char *inject,
-	const char *lua_path
+	const char *lua_path,
+	const char *lua_cpath
 );
 
 void
@@ -316,6 +317,7 @@ static const struct luaFdwOption valid_options[] = {
 	{"script", ForeignTableRelationId},
 	{"inject", ForeignTableRelationId},
 	{"lua_path", ForeignTableRelationId},
+	{"lua_cpath", ForeignTableRelationId},
 
 //	/* Format options */
 //	/* oids option is not supported */
@@ -360,7 +362,7 @@ lua_popnumber (lua_State *lua)
 }
 
 lua_State*
-lua_start (const char *script, const char *inject, const char *lua_path)
+lua_start (const char *script, const char *inject, const char *lua_path, const char *lua_cpath)
 {
 	lua_State *lua;
 	char scratch[1024];
@@ -371,6 +373,13 @@ lua_start (const char *script, const char *inject, const char *lua_path)
 	if (lua_path)
 	{
 		snprintf(scratch, 1024, "package.path = package.path .. ';%s'", lua_path);
+		if (luaL_dostring(lua, scratch) != 0)
+			ereport(ERROR, (errcode(ERRCODE_FDW_ERROR), errmsg("lua_fdw lua error: %s", lua_tostring(lua, -1))));
+	}
+
+	if (lua_cpath)
+	{
+		snprintf(scratch, 1024, "package.cpath = package.cpath .. ';%s'", lua_cpath);
 		if (luaL_dostring(lua, scratch) != 0)
 			ereport(ERROR, (errcode(ERRCODE_FDW_ERROR), errmsg("lua_fdw lua error: %s", lua_tostring(lua, -1))));
 	}
@@ -601,6 +610,7 @@ luaGetForeignRelSize (PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid
 	const char *script = NULL;
 	const char *inject = NULL;
 	const char *lua_path = NULL;
+	const char *lua_cpath = NULL;
 	lua_State *lua;
 	int i;
 
@@ -640,6 +650,9 @@ luaGetForeignRelSize (PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid
 
 		if (strcmp(def->defname, "lua_path") == 0)
 			lua_path = defGetString(def);
+
+		if (strcmp(def->defname, "lua_cpath") == 0)
+			lua_cpath = defGetString(def);
 	}
 
 	plan_state = palloc0(sizeof(LuaFdwPlanState));
@@ -648,7 +661,7 @@ luaGetForeignRelSize (PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid
 
 	/* initialize required state in plan_state */
 
-	lua = plan_state->lua = lua_start(script, inject, lua_path);
+	lua = plan_state->lua = lua_start(script, inject, lua_path, lua_cpath);
 
 	lua_getglobal(lua, "fdw");
 
