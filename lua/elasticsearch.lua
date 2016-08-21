@@ -56,7 +56,7 @@ function ScanStart ()
   for i, clause in ipairs(fdw.clauses) do
     local field = remap[clause.column] or clause.column
     if clause.operator == "like" then
-      local value = clause.constant:gsub("%%", "")
+      local value = clause.constant:gsub("%%", "*")
       table.insert(filters, { match = { [field] = value }})
     end
     if clause.operator == "eq" then
@@ -77,7 +77,6 @@ function ScanStart ()
   end
 
 --  fdw.ereport(fdw.WARNING, json.encode(fdw.clauses))
-  fdw.ereport(fdw.INFO, json.encode(filters))
 
   data, err = client:search({
     index = index,
@@ -134,4 +133,8 @@ function ScanEnd ()
   client:clearScroll({
     scroll_id = scroll_id
   })
+end
+
+function ScanExplain ()
+  return json.encode(filters)
 end
