@@ -796,9 +796,8 @@ luaGetForeignPlan (
 	Node *arg1, *arg2;
 	Relation rel;
 	TupleDesc desc;
-	int attno;
-	int clause;
-	int is_eq, is_like, is_lt, is_gt;
+	int attno, clause, swap;
+	int is_eq, is_ne, is_like, is_lt, is_gt, is_lte, is_gte;
 	Oid id;
 	char scratch[50];
 
@@ -847,19 +846,29 @@ luaGetForeignPlan (
 		if (rinfo->type == T_RestrictInfo && !rinfo->orclause && rinfo->clause->type == T_OpExpr)
 		{
 			op = (OpExpr*) rinfo->clause;
-			elog(WARNING, "op: %d", op->opno);
 
 			if (list_length(op->args) == 2)
 			{
 				arg1 = list_nth(op->args, 0);
 				arg2 = list_nth(op->args, 1);
-				elog(WARNING, "arg1: %d arg2: %d", arg1->type, arg2->type);
+
+				swap = 0;
+
+				if (arg2->type == T_Var && arg1->type == T_Const)
+				{
+					arg1 = list_nth(op->args, 1);
+					arg2 = list_nth(op->args, 0);
+					swap = 1;
+				}
 
 				if (arg1->type == T_Var && arg2->type == T_Const)
 				{
 					id = ((Const*)arg2)->consttype;
 					attno = ((Var*)arg1)->varattno-1;
-					elog(WARNING, "id: %d", id);
+
+					is_like =
+						op->opno == OID_TEXT_LIKE_OP
+					;
 
 					is_eq =
 						op->opno == 15 // int48eq
@@ -868,11 +877,24 @@ luaGetForeignPlan (
 						|| op->opno == 2060 // timestamp_eq
 					;
 
-					is_like =
-						op->opno == OID_TEXT_LIKE_OP
+					is_ne =
+						op->opno == 36 // int48ne
+						|| op->opno == 518 // int4ne
+						|| op->opno == 531 // textne
+						|| op->opno == 2060 // timestamp_eq
 					;
 
-					is_gt = 0;
+					is_gt =
+						op->opno == 512 // int4gt
+						|| op->opno == 413 // int8gt
+						|| op->opno == 2064 // timestamp_gt
+					;
+
+					is_gte =
+						op->opno == 525 // int4ge
+						|| op->opno == 415 // int8ge
+						|| op->opno == 2065 // timestamp_ge
+					;
 
 					is_lt =
 						op->opno == Int4LessOperator
@@ -880,7 +902,24 @@ luaGetForeignPlan (
 						|| op->opno == 2062 // timestamp_lt
 					;
 
-					if ((is_eq || is_like) && (id == TEXTOID || id == INT4OID || id == INT8OID || id == TIMESTAMPOID))
+					is_lte =
+						op->opno == 523 // int4le
+						|| op->opno == 414 // int8le
+						|| op->opno == 2063 // timestamp_le
+					;
+
+					if (swap)
+					{
+						     if (is_lt) { is_lt = 0; is_gt = 1; }
+						else if (is_gt) { is_gt = 0; is_lt = 1; }
+						else if (is_lte) { is_lte = 0; is_gte = 1; }
+						else if (is_gte) { is_gte = 0; is_lte = 1; }
+
+						is_like = 0;
+					}
+
+					if ((is_eq || is_ne || is_like || is_lt || is_gt || is_lte || is_gte)
+						&& (id == TEXTOID || id == INT4OID || id == INT8OID || id == TIMESTAMPOID))
 					{
 						lua_pushnumber(lua, clause++);
 						lua_createtable(lua, 0, 0);
@@ -894,46 +933,52 @@ luaGetForeignPlan (
 							is_like ? "like":
 							is_lt   ? "lt":
 							is_gt   ? "gt":
+							is_lte  ? "lte":
+							is_gte  ? "gte":
+							is_ne   ? "ne":
 							"eq"
 						);
 						lua_settable(lua, -3);
 
 						lua_pushstring(lua, "type");
-
 						switch (id)
 						{
 							case INT4OID:
 							case INT8OID:
 								lua_pushstring(lua, "integer");
 								break;
+
 							case TIMESTAMPOID:
 								lua_pushstring(lua, "timestamp");
 								break;
+
 							default:
 								lua_pushstring(lua, "text");
 						}
 						lua_settable(lua, -3);
 
 						lua_pushstring(lua, "constant");
-
 						switch (id)
 						{
 							case INT4OID:
 								snprintf(scratch, sizeof(scratch), "%d", DatumGetInt32(((Const*)arg2)->constvalue));
 								lua_pushstring(lua, scratch);
 								break;
+
 							case INT8OID:
 								snprintf(scratch, sizeof(scratch), "%ld", DatumGetInt64(((Const*)arg2)->constvalue));
 								lua_pushstring(lua, scratch);
 								break;
+
 							case TIMESTAMPOID:
 								lua_pushstring(lua, DatumGetCString(DirectFunctionCall1(timestamp_out, ((Const*)arg2)->constvalue)));
 								break;
+
 							default:
 								lua_pushstring(lua, DatumGetCString(DirectFunctionCall1(textout, ((Const*)arg2)->constvalue)));
 						}
-
 						lua_settable(lua, -3);
+
 						lua_settable(lua, -3); // #clause
 					}
 				}

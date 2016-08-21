@@ -48,9 +48,7 @@ function ScanStart ()
     },
   })
 
-  filters = {
-    { range = { ["@timestamp"] = { gte = "2016-08-01" }}},
-  }
+  filters = { }
 
   for i, clause in ipairs(fdw.clauses) do
     local field = remap[clause.column] or clause.column
@@ -60,6 +58,18 @@ function ScanStart ()
     end
     if clause.operator == "eq" then
       table.insert(filters, { term = { [field] = clause.constant }})
+    end
+    if clause.operator == "lt" then
+      table.insert(filters, { range = { [field] = { lt = clause.constant:gsub(" ", "T").."Z" }}})
+    end
+    if clause.operator == "gt" then
+      table.insert(filters, { range = { [field] = { gt = clause.constant:gsub(" ", "T").."Z" }}})
+    end
+    if clause.operator == "lte" then
+      table.insert(filters, { range = { [field] = { lte = clause.constant:gsub(" ", "T").."Z" }}})
+    end
+    if clause.operator == "gte" then
+      table.insert(filters, { range = { [field] = { gte = clause.constant:gsub(" ", "T").."Z" }}})
     end
   end
 
