@@ -10,6 +10,9 @@
 --
 ---------------------------------------------------------------------------
 
+-- https://luarocks.org/#quick-start
+-- https://github.com/DhavalKapil/elasticsearch-lua
+
 --json = require('json')
 elasticsearch = require("elasticsearch")
 

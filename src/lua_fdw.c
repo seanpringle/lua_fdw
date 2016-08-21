@@ -79,7 +79,8 @@ lua_popnumber (
 lua_State*
 lua_start (
 	const char *script,
-	const char *inject
+	const char *inject,
+	const char *lua_path
 );
 
 void
@@ -314,6 +315,7 @@ typedef struct
 static const struct luaFdwOption valid_options[] = {
 	{"script", ForeignTableRelationId},
 	{"inject", ForeignTableRelationId},
+	{"lua_path", ForeignTableRelationId},
 
 //	/* Format options */
 //	/* oids option is not supported */
@@ -358,12 +360,20 @@ lua_popnumber (lua_State *lua)
 }
 
 lua_State*
-lua_start (const char *script, const char *inject)
+lua_start (const char *script, const char *inject, const char *lua_path)
 {
 	lua_State *lua;
+	char scratch[1024];
 
 	lua = luaL_newstate();
 	luaL_openlibs(lua);
+
+	if (lua_path)
+	{
+		snprintf(scratch, 1024, "package.path = '%s;' .. package.path", lua_path);
+		if (luaL_dostring(lua, scratch) != 0)
+			ereport(ERROR, (errcode(ERRCODE_FDW_ERROR), errmsg("lua_fdw lua error: %s", lua_tostring(lua, -1))));
+	}
 
 	//elog(WARNING, "function %s %lx", __func__, (uint64_t)lua);
 
@@ -590,6 +600,7 @@ luaGetForeignRelSize (PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid
 	TupleDesc desc;
 	const char *script = NULL;
 	const char *inject = NULL;
+	const char *lua_path = NULL;
 	lua_State *lua;
 	int i;
 
@@ -626,6 +637,9 @@ luaGetForeignRelSize (PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid
 
 		if (strcmp(def->defname, "inject") == 0)
 			inject = defGetString(def);
+
+		if (strcmp(def->defname, "lua_path") == 0)
+			lua_path = defGetString(def);
 	}
 
 	plan_state = palloc0(sizeof(LuaFdwPlanState));
@@ -634,7 +648,7 @@ luaGetForeignRelSize (PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid
 
 	/* initialize required state in plan_state */
 
-	lua = plan_state->lua = lua_start(script, inject);
+	lua = plan_state->lua = lua_start(script, inject, lua_path);
 
 	lua_getglobal(lua, "fdw");
 
