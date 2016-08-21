@@ -55,7 +55,7 @@ The FDW looks for named Lua callback functions to be handle each stage of query 
 | `ScanRestart()` | N/A | Table Scan | Restart the current table scan from the beginning |
 | `ScanEnd()` | N/A | Table Scan | Close/free any resources used for the current table scan |
 
-A global table called `fdw` exposes information about the table and query. Some fields:
+A global Lua table called `fdw` exposes information about the table and query. Some fields:
 
 | Element | Lua Type | Description |
 | --- | --- | --- |
@@ -73,6 +73,7 @@ FOREIGN TABLE ... OPTIONS (
   inject '... lua code ...'
 );
 ```
+
 | Option | Description |
 | --- | --- |
 | script | Path to the Lua script |
