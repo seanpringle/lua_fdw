@@ -971,7 +971,7 @@ luaGetForeignPlan (
 								break;
 
 							case TIMESTAMPOID:
-								lua_pushstring(lua, DatumGetCString(DirectFunctionCall1(timestamp_out, ((Const*)arg2)->constvalue)));
+								lua_pushstring(lua, DatumGetCString(DirectFunctionCall1(timestamptz_out, ((Const*)arg2)->constvalue)));
 								break;
 
 							default:

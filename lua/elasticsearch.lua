@@ -60,16 +60,16 @@ function ScanStart ()
       table.insert(filters, { term = { [field] = clause.constant }})
     end
     if clause.operator == "lt" then
-      table.insert(filters, { range = { [field] = { lt = clause.constant:gsub(" ", "T").."Z" }}})
+      table.insert(filters, { range = { [field] = { lt = clause.constant:gsub(" ", "T") }}})
     end
     if clause.operator == "gt" then
-      table.insert(filters, { range = { [field] = { gt = clause.constant:gsub(" ", "T").."Z" }}})
+      table.insert(filters, { range = { [field] = { gt = clause.constant:gsub(" ", "T") }}})
     end
     if clause.operator == "lte" then
-      table.insert(filters, { range = { [field] = { lte = clause.constant:gsub(" ", "T").."Z" }}})
+      table.insert(filters, { range = { [field] = { lte = clause.constant:gsub(" ", "T") }}})
     end
     if clause.operator == "gte" then
-      table.insert(filters, { range = { [field] = { gte = clause.constant:gsub(" ", "T").."Z" }}})
+      table.insert(filters, { range = { [field] = { gte = clause.constant:gsub(" ", "T") }}})
     end
   end
 
