@@ -80,3 +80,21 @@ FOREIGN TABLE ... OPTIONS (
 
 ## Scan Clauses (condition pushdown)
 
+To allow pushing filter conditions to the foreign data service, `fdw.clauses` lists any simple top-level WHERE clauses of the form *"column" (operator) 'constant'*, eg:
+
+```
+"column" (operator) number
+"column" (operator) 'string'
+"column" (operator) timestamp
+```
+
+Each clause is split into a table:
+
+```lua
+{
+  column => "email",
+  operator => "eq",
+  type => "text",
+  constant => "me@example.com",
+}
+```
