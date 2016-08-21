@@ -55,6 +55,16 @@ The FDW looks for named Lua callback functions to be handle each stage of query 
 | `ScanRestart()` | N/A | Table Scan | Restart the current table scan from the beginning |
 | `ScanEnd()` | N/A | Table Scan | Close/free any resources used for the current table scan |
 
+A global table called `fdw` exposes information about the table and query. Some fields:
+
+| Element | Lua Type | Description |
+| --- | --- | --- |
+| `fdw.table` | string | Foreign table name |
+| `fdw.columns` | table | { [column] = 'type', ... } |
+| `fdw.clauses` | table | List of simple WHERE clauses: "column" eq/ne/lt/gt/let/gte 'constant' |
+| `fdw.ereport()` | function | PostgreSQL error messages, eg fdw.ereport(fdw.WARNING, "some text") |
+| `fdw.WARNING` | number | PostgreSQL error level. Also DEBUG5, DEBUG4, DEBUG3, DEBUG2, DEBUG1, INFO, NOTICE, ERROR, LOG, FATAL, and PANIC |
+
 ## Table OPTIONS
 
 ```
@@ -67,3 +77,6 @@ FOREIGN TABLE ... OPTIONS (
 | --- | --- |
 | script | Path to the Lua script |
 | inject | Fragment of Lua code to execute after the script is loaded. Useful for setting globals. May be replaced with a constructor callback. |
+
+## Scan Clauses (condition pushdown)
+
