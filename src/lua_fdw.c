@@ -1199,6 +1199,10 @@ luaEndForeignScan(ForeignScanState *node)
 		if (lua_pcall(scan_state->lua, 0, 0, 0) != 0)
 			ereport(ERROR, (errcode(ERRCODE_FDW_ERROR), errmsg("lua_fdw lua error: %s", lua_tostring(scan_state->lua, -1))));
 	}
+	else
+	{
+		lua_pop(scan_state->lua, 1);
+	}
 
 	lua_stop(scan_state->lua);
 	node->fdw_state = NULL;
@@ -1285,7 +1289,7 @@ luaPlanForeignModify(PlannerInfo *root, ModifyTable *plan, Index resultRelation,
 static void
 luaBeginForeignModify(ModifyTableState *mtstate, ResultRelInfo *rinfo, List *fdw_private, int subplan_index, int eflags)
 {
-	LuaFdwModifyState *modify_state;
+	//LuaFdwModifyState *modify_state;
 
 	/*
 	 * Begin executing a foreign table modification operation. This routine is
@@ -1315,23 +1319,23 @@ luaBeginForeignModify(ModifyTableState *mtstate, ResultRelInfo *rinfo, List *fdw
 
 	//elog(WARNING, "function %s", __func__);
 
-	modify_state = palloc0(sizeof(LuaFdwModifyState));
-	rinfo->ri_FdwState = modify_state;
-	modify_state->lua = lua_start(NULL, NULL);
+//	modify_state = palloc0(sizeof(LuaFdwModifyState));
+//	rinfo->ri_FdwState = modify_state;
+//	modify_state->lua = lua_start(NULL, NULL);
 
-	lua_getglobal(modify_state->lua, "BeginForeignModify");
-
-	if (lua_isfunction(modify_state->lua, -1) && lua_pcall(modify_state->lua, 0, 0, 0) != 0)
-	{
-		elog(ERROR, "BeginForeignModify: %s", lua_tostring(modify_state->lua, -1));
-	}
+//	lua_getglobal(modify_state->lua, "BeginForeignModify");
+//
+//	if (lua_isfunction(modify_state->lua, -1) && lua_pcall(modify_state->lua, 0, 0, 0) != 0)
+//	{
+//		elog(ERROR, "BeginForeignModify: %s", lua_tostring(modify_state->lua, -1));
+//	}
 }
 
 
 static TupleTableSlot *
 luaExecForeignInsert(EState *estate, ResultRelInfo *rinfo, TupleTableSlot *slot, TupleTableSlot *planSlot)
 {
-	LuaFdwModifyState *modify_state;
+	//LuaFdwModifyState *modify_state;
 
 	/*
 	 * Insert one tuple into the foreign table. estate is global execution
@@ -1362,13 +1366,13 @@ luaExecForeignInsert(EState *estate, ResultRelInfo *rinfo, TupleTableSlot *slot,
 
 	//elog(WARNING, "function %s", __func__);
 
-	modify_state = (LuaFdwModifyState *) rinfo->ri_FdwState;
-	lua_getglobal(modify_state->lua, "ExecForeignInsert");
-
-	if (lua_isfunction(modify_state->lua, -1) && lua_pcall(modify_state->lua, 0, 0, 0) != 0)
-	{
-		elog(ERROR, "ExecForeignInsert: %s", lua_tostring(modify_state->lua, -1));
-	}
+//	modify_state = (LuaFdwModifyState *) rinfo->ri_FdwState;
+//	lua_getglobal(modify_state->lua, "ExecForeignInsert");
+//
+//	if (lua_isfunction(modify_state->lua, -1) && lua_pcall(modify_state->lua, 0, 0, 0) != 0)
+//	{
+//		elog(ERROR, "ExecForeignInsert: %s", lua_tostring(modify_state->lua, -1));
+//	}
 
 	return slot;
 }
@@ -1377,7 +1381,7 @@ luaExecForeignInsert(EState *estate, ResultRelInfo *rinfo, TupleTableSlot *slot,
 static TupleTableSlot *
 luaExecForeignUpdate(EState *estate, ResultRelInfo *rinfo, TupleTableSlot *slot, TupleTableSlot *planSlot)
 {
-	LuaFdwModifyState *modify_state;
+	//LuaFdwModifyState *modify_state;
 
 	/*
 	 * Update one tuple in the foreign table. estate is global execution state
@@ -1408,13 +1412,13 @@ luaExecForeignUpdate(EState *estate, ResultRelInfo *rinfo, TupleTableSlot *slot,
 
 	//elog(WARNING, "function %s", __func__);
 
-	modify_state = (LuaFdwModifyState *) rinfo->ri_FdwState;
-	lua_getglobal(modify_state->lua, "ExecForeignUpdate");
-
-	if (lua_isfunction(modify_state->lua, -1) && lua_pcall(modify_state->lua, 0, 0, 0) != 0)
-	{
-		elog(ERROR, "ExecForeignUpdate: %s", lua_tostring(modify_state->lua, -1));
-	}
+//	modify_state = (LuaFdwModifyState *) rinfo->ri_FdwState;
+//	lua_getglobal(modify_state->lua, "ExecForeignUpdate");
+//
+//	if (lua_isfunction(modify_state->lua, -1) && lua_pcall(modify_state->lua, 0, 0, 0) != 0)
+//	{
+//		elog(ERROR, "ExecForeignUpdate: %s", lua_tostring(modify_state->lua, -1));
+//	}
 
 	return slot;
 }
@@ -1423,7 +1427,7 @@ luaExecForeignUpdate(EState *estate, ResultRelInfo *rinfo, TupleTableSlot *slot,
 static TupleTableSlot *
 luaExecForeignDelete(EState *estate, ResultRelInfo *rinfo, TupleTableSlot *slot, TupleTableSlot *planSlot)
 {
-	LuaFdwModifyState *modify_state;
+	//LuaFdwModifyState *modify_state;
 
 	/*
 	 * Delete one tuple from the foreign table. estate is global execution
@@ -1457,13 +1461,13 @@ luaExecForeignDelete(EState *estate, ResultRelInfo *rinfo, TupleTableSlot *slot,
 
 	//elog(WARNING, "function %s", __func__);
 
-	modify_state = (LuaFdwModifyState *) rinfo->ri_FdwState;
-	lua_getglobal(modify_state->lua, "ExecForeignDelete");
-
-	if (lua_isfunction(modify_state->lua, -1) && lua_pcall(modify_state->lua, 0, 0, 0) != 0)
-	{
-		elog(ERROR, "ExecForeignDelete: %s", lua_tostring(modify_state->lua, -1));
-	}
+//	modify_state = (LuaFdwModifyState *) rinfo->ri_FdwState;
+//	lua_getglobal(modify_state->lua, "ExecForeignDelete");
+//
+//	if (lua_isfunction(modify_state->lua, -1) && lua_pcall(modify_state->lua, 0, 0, 0) != 0)
+//	{
+//		elog(ERROR, "ExecForeignDelete: %s", lua_tostring(modify_state->lua, -1));
+//	}
 
 	return slot;
 }
@@ -1472,7 +1476,7 @@ luaExecForeignDelete(EState *estate, ResultRelInfo *rinfo, TupleTableSlot *slot,
 static void
 luaEndForeignModify(EState *estate, ResultRelInfo *rinfo)
 {
-	LuaFdwModifyState *modify_state;
+	//LuaFdwModifyState *modify_state;
 
 	/*
 	 * End the table update and release resources. It is normally not
@@ -1485,13 +1489,13 @@ luaEndForeignModify(EState *estate, ResultRelInfo *rinfo)
 
 	//elog(WARNING, "function %s", __func__);
 
-	modify_state = (LuaFdwModifyState *) rinfo->ri_FdwState;
-	lua_getglobal(modify_state->lua, "EndForeignModify");
-
-	if (lua_isfunction(modify_state->lua, -1) && lua_pcall(modify_state->lua, 0, 0, 0) != 0)
-	{
-		elog(ERROR, "EndForeignModify: %s", lua_tostring(modify_state->lua, -1));
-	}
+//	modify_state = (LuaFdwModifyState *) rinfo->ri_FdwState;
+//	lua_getglobal(modify_state->lua, "EndForeignModify");
+//
+//	if (lua_isfunction(modify_state->lua, -1) && lua_pcall(modify_state->lua, 0, 0, 0) != 0)
+//	{
+//		elog(ERROR, "EndForeignModify: %s", lua_tostring(modify_state->lua, -1));
+//	}
 }
 
 static int
@@ -1565,7 +1569,7 @@ luaExplainForeignScan (ForeignScanState *node, struct ExplainState * es)
 static void
 luaExplainForeignModify (ModifyTableState *mtstate, ResultRelInfo *rinfo, List *fdw_private, int subplan_index, struct ExplainState * es)
 {
-	LuaFdwModifyState *modify_state;
+	//LuaFdwModifyState *modify_state;
 
 	/*
 	 * Print additional EXPLAIN output for a foreign table update. This
@@ -1581,21 +1585,21 @@ luaExplainForeignModify (ModifyTableState *mtstate, ResultRelInfo *rinfo, List *
 
 	//elog(WARNING, "function %s", __func__);
 
-	modify_state = (LuaFdwModifyState *) rinfo->ri_FdwState;
-	lua_getglobal(modify_state->lua, "ExplainForeignModify");
-
-	if (lua_isfunction(modify_state->lua, -1))
-	{
-		if (lua_pcall(modify_state->lua, 0, 1, 0) != 0)
-			ereport(ERROR, (errcode(ERRCODE_FDW_ERROR), errmsg("lua_fdw lua error: %s", lua_tostring(modify_state->lua, -1))));
-		else
-		{
-			if (lua_isstring(modify_state->lua, -1))
-				ExplainPropertyText("lua_fdw", lua_tostring(modify_state->lua, -1), es);
-
-			lua_pop(modify_state->lua, 1);
-		}
-	}
+//	modify_state = (LuaFdwModifyState *) rinfo->ri_FdwState;
+//	lua_getglobal(modify_state->lua, "ExplainForeignModify");
+//
+//	if (lua_isfunction(modify_state->lua, -1))
+//	{
+//		if (lua_pcall(modify_state->lua, 0, 1, 0) != 0)
+//			ereport(ERROR, (errcode(ERRCODE_FDW_ERROR), errmsg("lua_fdw lua error: %s", lua_tostring(modify_state->lua, -1))));
+//		else
+//		{
+//			if (lua_isstring(modify_state->lua, -1))
+//				ExplainPropertyText("lua_fdw", lua_tostring(modify_state->lua, -1), es);
+//
+//			lua_pop(modify_state->lua, 1);
+//		}
+//	}
 }
 
 static bool
