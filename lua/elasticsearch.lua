@@ -9,34 +9,39 @@
 -- Author: Sean Pringle <sean.pringle@gmail.com> (lua_fdw)
 --
 ---------------------------------------------------------------------------
-
+--
 -- https://luarocks.org/#quick-start
 -- https://github.com/DhavalKapil/elasticsearch-lua
+--
+-- Example from an ELK stack ingesting Apache combined access logs:
+--
+-- CREATE FOREIGN TABLE elastic_apache_access (
+--   stamp timestamp,
+--   agent text,
+--   bytes integer,
+--   clientip text,
+--   domain text,
+--   httpversion double precision,
+--   referrer text,
+--   request text,
+--   response integer,
+--   verb text
+-- ) SERVER lua_srv OPTIONS (
+--   script '/path/to/this/script/elasticsearch.lua',
+--   inject 'index = "apache_access" remap["stamp"] = "@timestamp"'
+-- );
 
 json = require('cjson')
 elasticsearch = require("elasticsearch")
 
-remap = { }
+-- Connection. Override via 'inject' option on each foreign table
 proto = "http"
-host = "localhost"
-port = 9200
+host  = "localhost"
+port  = 9200
 index = nil
 
-function EstimateRowCount ()
-  return 1
-end
-
-function EstimateRowWidth ()
-  return string.len("hello world")
-end
-
-function EstimateStartupCost ()
-  return 1.0
-end
-
-function EstimateTotalCost ()
-  return EstimateRowCount()
-end
+-- Re-map Postgres columns to Elasticsearch fields, eg: stamp = "@timestamp"
+remap = { }
 
 function ScanStart ()
 
