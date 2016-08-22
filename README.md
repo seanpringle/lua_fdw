@@ -69,7 +69,7 @@ A global Lua table called `fdw` exposes information about the table and query. S
 ## Table OPTIONS
 
 ```
-FOREIGN TABLE ... OPTIONS (
+CREATE FOREIGN TABLE ... OPTIONS (
   script '/path/to/hello_world.lua'
   inject '... lua code ...',
   lua_path '/custom/path/?.lua',
