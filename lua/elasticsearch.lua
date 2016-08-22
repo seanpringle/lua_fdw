@@ -54,25 +54,33 @@ function ScanStart ()
   filters = { }
 
   for i, clause in ipairs(fdw.clauses) do
+
     local field = remap[clause.column] or clause.column
+    local value = clause.constant
+
     if clause.operator == "like" then
-      local value = clause.constant:gsub("%%", "*")
+      value = clause.constant:gsub("%%", "*")
       table.insert(filters, { match = { [field] = value }})
     end
+
+    if fdw.columns[clause.column] == "timestamp" then
+      value = clause.constant:gsub(" ", "T")
+    end
+
     if clause.operator == "eq" then
-      table.insert(filters, { term = { [field] = clause.constant }})
+      table.insert(filters, { term = { [field] = value }})
     end
     if clause.operator == "lt" then
-      table.insert(filters, { range = { [field] = { lt = clause.constant:gsub(" ", "T") }}})
+      table.insert(filters, { range = { [field] = { lt = value }}})
     end
     if clause.operator == "gt" then
-      table.insert(filters, { range = { [field] = { gt = clause.constant:gsub(" ", "T") }}})
+      table.insert(filters, { range = { [field] = { gt = value }}})
     end
     if clause.operator == "lte" then
-      table.insert(filters, { range = { [field] = { lte = clause.constant:gsub(" ", "T") }}})
+      table.insert(filters, { range = { [field] = { lte = value }}})
     end
     if clause.operator == "gte" then
-      table.insert(filters, { range = { [field] = { gte = clause.constant:gsub(" ", "T") }}})
+      table.insert(filters, { range = { [field] = { gte = value }}})
     end
   end
 
@@ -136,5 +144,5 @@ function ScanEnd ()
 end
 
 function ScanExplain ()
-  return json.encode(filters)
+  return json.encode({ columns = fdw.columns, clauses = fdw.clauses, filters = filters})
 end

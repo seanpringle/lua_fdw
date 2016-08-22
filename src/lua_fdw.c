@@ -680,6 +680,11 @@ luaGetForeignRelSize (PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid
 			case INT8OID:
 				lua_pushstring(lua, "integer");
 				break;
+
+			case TIMESTAMPOID:
+				lua_pushstring(lua, "timestamp");
+				break;
+
 			default:
 				lua_pushstring(lua, "text");
 		}
