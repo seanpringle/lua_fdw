@@ -51,29 +51,12 @@ extern Datum lua_fdw_validator(PG_FUNCTION_ARGS);
 PG_FUNCTION_INFO_V1(lua_fdw_handler);
 PG_FUNCTION_INFO_V1(lua_fdw_validator);
 
-void
-_PG_init(
-	void
-);
-
-void
-_PG_fini(
-	void
-);
-
-const char*
-get_pg_type_str (
-	Oid id
-);
-
-const char*
-lua_popstring (
-	lua_State *lua
-);
-
-double
-lua_popnumber (
-	lua_State *lua
+int
+lua_callback (
+	lua_State *lua,
+	const char *func,
+	int args,
+	int results
 );
 
 lua_State*
@@ -335,30 +318,23 @@ static const struct luaFdwOption valid_options[] = {
 	{NULL, InvalidOid}
 };
 
-const char*
-get_pg_type_str (Oid id)
+int
+lua_callback (lua_State *lua, const char *func, int args, int results)
 {
-	switch (id)
+	lua_getglobal(lua, func);
+
+	if (lua_isfunction(lua, -1))
 	{
-		default:
-			return "text";
+		if (lua_pcall(lua, args, results, 0) == 0)
+			return 1;
+
+		ereport(ERROR, (errcode(ERRCODE_FDW_ERROR), errmsg("lua_fdw lua error: %s", lua_tostring(lua, -1))));
 	}
-}
-
-const char*
-lua_popstring (lua_State *lua)
-{
-	const char *str = lua_tostring(lua, -1);
-	lua_pop(lua, 1);
-	return str;
-}
-
-double
-lua_popnumber (lua_State *lua)
-{
-	double n = lua_tonumber(lua, -1);
-	lua_pop(lua, 1);
-	return n;
+	else
+	{
+		lua_pop(lua, 1);
+	}
+	return 0;
 }
 
 lua_State*
@@ -383,8 +359,6 @@ lua_start (const char *script, const char *inject, const char *lua_path, const c
 		if (luaL_dostring(lua, scratch) != 0)
 			ereport(ERROR, (errcode(ERRCODE_FDW_ERROR), errmsg("lua_fdw lua error: %s", lua_tostring(lua, -1))));
 	}
-
-	//elog(WARNING, "function %s %lx", __func__, (uint64_t)lua);
 
 	lua_createtable(lua, 0, 0);
 
@@ -451,29 +425,17 @@ lua_start (const char *script, const char *inject, const char *lua_path, const c
 void
 lua_stop (lua_State *lua)
 {
-	//elog(WARNING, "function %s %lx", __func__, (uint64_t)lua);
 	lua_close(lua);
 }
 
 int
 lua_ereport (lua_State *lua)
 {
-	const char *message = lua_popstring(lua);
-	int level = lua_popnumber(lua);
+	const char *message = lua_tostring(lua, -1);
+	int level = lua_tonumber(lua, -2);
 	ereport(level, (errcode(ERRCODE_FDW_ERROR), errmsg("lua_fdw: %s", message)));
+	lua_pop(lua, 2);
 	return 0;
-}
-
-void
-_PG_init ()
-{
-	//elog(WARNING, "function %s", __func__);
-}
-
-void
-_PG_fini ()
-{
-	//elog(WARNING, "function %s", __func__);
 }
 
 /*
@@ -498,8 +460,6 @@ Datum
 lua_fdw_handler (PG_FUNCTION_ARGS)
 {
 	FdwRoutine *fdwroutine = makeNode(FdwRoutine);
-
-	//elog(WARNING, "function %s", __func__);
 
 	/*
 	 * assign the handlers for the FDW
@@ -559,8 +519,6 @@ lua_fdw_validator (PG_FUNCTION_ARGS)
 	Oid catalog = PG_GETARG_OID(1);
 	ListCell *cell;
 
-	//elog(WARNING, "function %s", __func__);
-
 	/*
 	 * Check that only options supported by lua_fdw, and allowed for the
 	 * current object type, are given.
@@ -613,8 +571,6 @@ luaGetForeignRelSize (PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid
 	const char *lua_cpath = NULL;
 	lua_State *lua;
 	int i;
-
-	//elog(WARNING, "function %s", __func__);
 
 	/*
 	 * Obtain relation size estimates for a foreign table. This is called at
@@ -694,34 +650,20 @@ luaGetForeignRelSize (PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid
 
 	lua_pop(lua, 1); // fdw
 
-	lua_getglobal(lua, "EstimateRowCount");
-
-	if (lua_isfunction(lua, -1))
+	if (lua_callback(lua, "EstimateRowCount", 0, 1))
 	{
-		if (lua_pcall(lua, 0, 1, 0) != 0)
-			ereport(ERROR, (errcode(ERRCODE_FDW_ERROR), errmsg("lua_fdw lua error: %s", lua_tostring(lua, -1))));
-		else
-		{
-			if (lua_isnumber(lua, -1))
-				baserel->rows = lua_tonumber(lua, -1);
+		if (lua_isnumber(lua, -1))
+			baserel->rows = lua_tonumber(lua, -1);
 
-			lua_pop(lua, 1);
-		}
+		lua_pop(lua, 1);
 	}
 
-	lua_getglobal(lua, "EstimateRowWidth");
-
-	if (lua_isfunction(lua, -1))
+	if (lua_callback(lua, "EstimateRowWidth", 0, 1))
 	{
-		if (lua_pcall(lua, 0, 1, 0) != 0)
-			ereport(ERROR, (errcode(ERRCODE_FDW_ERROR), errmsg("lua_fdw lua error: %s", lua_tostring(lua, -1))));
-		else
-		{
-			if (lua_isnumber(lua, -1))
-				baserel->width = lua_tonumber(lua, -1);
+		if (lua_isnumber(lua, -1))
+			baserel->width = lua_tonumber(lua, -1);
 
-			lua_pop(lua, 1);
-		}
+		lua_pop(lua, 1);
 	}
 
 	heap_close(rel, AccessShareLock);
@@ -748,48 +690,24 @@ luaGetForeignPaths (PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid)
 	 * that is needed to identify the specific scan method intended.
 	 */
 
-	//elog(WARNING, "function %s", __func__);
-
 	plan_state = baserel->fdw_private;
 
 	startup_cost = 0;
 	total_cost = startup_cost + baserel->rows;
 
-	lua_getglobal(plan_state->lua, "EstimateStartupCost");
-
-	if (lua_isfunction(plan_state->lua, -1))
+	if (lua_callback(plan_state->lua, "EstimateStartupCost", 0, 1))
 	{
-		if (lua_pcall(plan_state->lua, 0, 2, 0) != 0)
-			ereport(ERROR, (errcode(ERRCODE_FDW_ERROR), errmsg("lua_fdw lua error: %s", lua_tostring(plan_state->lua, -1))));
-		else
-		{
-			if (lua_isnumber(plan_state->lua, -1))
-				startup_cost = lua_tonumber(plan_state->lua, -1);
+		if (lua_isnumber(plan_state->lua, -1))
+			startup_cost = lua_tonumber(plan_state->lua, -1);
 
-			lua_pop(plan_state->lua, 1);
-		}
-	}
-	else
-	{
 		lua_pop(plan_state->lua, 1);
 	}
 
-	lua_getglobal(plan_state->lua, "EstimateTotalCost");
-
-	if (lua_isfunction(plan_state->lua, -1))
+	if (lua_callback(plan_state->lua, "EstimateTotalCost", 0, 1))
 	{
-		if (lua_pcall(plan_state->lua, 0, 2, 0) != 0)
-			ereport(ERROR, (errcode(ERRCODE_FDW_ERROR), errmsg("lua_fdw lua error: %s", lua_tostring(plan_state->lua, -1))));
-		else
-		{
-			if (lua_isnumber(plan_state->lua, -1))
-				total_cost = lua_tonumber(plan_state->lua, -1);
+		if (lua_isnumber(plan_state->lua, -1))
+			total_cost = lua_tonumber(plan_state->lua, -1);
 
-			lua_pop(plan_state->lua, 1);
-		}
-	}
-	else
-	{
 		lua_pop(plan_state->lua, 1);
 	}
 
@@ -854,8 +772,6 @@ luaGetForeignPlan (
 	 * nodes from the clauses and ignore pseudoconstants (which will be
 	 * handled elsewhere).
 	 */
-
-	//elog(WARNING, "function %s", __func__);
 
 	plan_state = baserel->fdw_private;
 	lua = plan_state->lua;
@@ -1026,14 +942,16 @@ luaGetForeignPlan (
 	scan_clauses = extract_actual_clauses(scan_clauses, false);
 
 	/* Create the ForeignScan node */
-	return make_foreignscan(tlist,
-							scan_clauses,
-							scan_relid,
-							NIL,	/* no expressions to evaluate */
-							(List*)lua,	/* no private state either */
-							NIL,	/* no custom tlist */
-							NIL,    /* no remote quals */
-							outer_plan);
+	return make_foreignscan(
+		tlist,
+		scan_clauses,
+		scan_relid,
+		NIL,	/* no expressions to evaluate */
+		(List*)lua,	/* private state */
+		NIL,	/* no custom tlist */
+		NIL,    /* no remote quals */
+		outer_plan
+	);
 }
 
 static void
@@ -1061,23 +979,11 @@ luaBeginForeignScan (ForeignScanState *node, int eflags)
 	 *
 	 */
 
-	//elog(WARNING, "function %s", __func__);
-
 	scan_state = palloc0(sizeof(LuaFdwScanState));
 	node->fdw_state = scan_state;
 	scan_state->lua = (lua_State*)plan->fdw_private;
 
-	lua_getglobal(scan_state->lua, "ScanStart");
-
-	if (lua_isfunction(scan_state->lua, -1))
-	{
-		if (lua_pcall(scan_state->lua, 0, 0, 0) != 0)
-			ereport(ERROR, (errcode(ERRCODE_FDW_ERROR), errmsg("lua_fdw lua error: %s", lua_tostring(scan_state->lua, -1))));
-	}
-	else
-	{
-		lua_pop(scan_state->lua, 1);
-	}
+	lua_callback(scan_state->lua, "ScanStart", 0, 0);
 }
 
 static TupleTableSlot *
@@ -1119,8 +1025,6 @@ luaIterateForeignScan(ForeignScanState *node)
 	 * (just as you would need to do in the case of a data type mismatch).
 	 */
 
-	//elog(WARNING, "function %s", __func__);
-
 	slot = node->ss.ss_ScanTupleSlot;
 	desc = slot->tts_tupleDescriptor;
 
@@ -1132,59 +1036,45 @@ luaIterateForeignScan(ForeignScanState *node)
 	/* get the next record, if any, and fill in the slot */
 
 	scan_state = (LuaFdwScanState *) node->fdw_state;
-	lua_getglobal(scan_state->lua, "ScanIterate");
 
-	if (lua_isfunction(scan_state->lua, -1))
+	if (lua_callback(scan_state->lua, "ScanIterate", 0, 1))
 	{
-		if (lua_pcall(scan_state->lua, 0, 1, 0) != 0)
+		if (lua_istable(scan_state->lua, -1))
 		{
-			ereport(ERROR, (errcode(ERRCODE_FDW_ERROR), errmsg("lua_fdw lua error: %s", lua_tostring(scan_state->lua, -1))));
-		}
-		else
-		{
-			if (lua_istable(scan_state->lua, -1))
+			for (i = 0; i < desc->natts; i++)
 			{
-				for (i = 0; i < desc->natts; i++)
+				lua_pushstring(scan_state->lua, desc->attrs[i]->attname.data);
+				lua_gettable(scan_state->lua, -2);
+
+				slot->tts_isnull[i] = true;
+
+				pgtype = desc->attrs[i]->atttypid;
+				tuple = SearchSysCache1(TYPEOID, ObjectIdGetDatum(pgtype));
+				tuple_ok = HeapTupleIsValid(tuple);
+
+				if (!tuple_ok)
 				{
-					lua_pushstring(scan_state->lua, desc->attrs[i]->attname.data);
-					lua_gettable(scan_state->lua, -2);
-
-					slot->tts_isnull[i] = true;
-
-					pgtype = desc->attrs[i]->atttypid;
-					tuple = SearchSysCache1(TYPEOID, ObjectIdGetDatum(pgtype));
-					tuple_ok = HeapTupleIsValid(tuple);
-
-					if (!tuple_ok)
-					{
-						ereport(ERROR, (errcode(ERRCODE_FDW_ERROR), errmsg("cache lookup failed for type %u", pgtype)));
-					}
-					else
-					if (lua_isstring(scan_state->lua, -1) && (value = (char*)lua_tostring(scan_state->lua, -1)))
-					{
-						slot->tts_isnull[i] = false;
-
-						typeinput = ((Form_pg_type)GETSTRUCT(tuple))->typinput;
-						typemod = ((Form_pg_type)GETSTRUCT(tuple))->typtypmod;
-
-						slot->tts_values[i] = OidFunctionCall3(typeinput, CStringGetDatum(value), ObjectIdGetDatum(InvalidOid), Int32GetDatum(typemod));
-					}
-					lua_pop(scan_state->lua, 1);
-					ReleaseSysCache(tuple);
+					ereport(ERROR, (errcode(ERRCODE_FDW_ERROR), errmsg("cache lookup failed for type %u", pgtype)));
 				}
-				ExecStoreVirtualTuple(slot);
+				else
+				if (lua_isstring(scan_state->lua, -1) && (value = (char*)lua_tostring(scan_state->lua, -1)))
+				{
+					slot->tts_isnull[i] = false;
+
+					typeinput = ((Form_pg_type)GETSTRUCT(tuple))->typinput;
+					typemod = ((Form_pg_type)GETSTRUCT(tuple))->typtypmod;
+
+					slot->tts_values[i] = OidFunctionCall3(typeinput, CStringGetDatum(value), ObjectIdGetDatum(InvalidOid), Int32GetDatum(typemod));
+				}
+				lua_pop(scan_state->lua, 1);
+				ReleaseSysCache(tuple);
 			}
-			lua_pop(scan_state->lua, 1);
+			ExecStoreVirtualTuple(slot);
 		}
-	}
-	else
-	{
 		lua_pop(scan_state->lua, 1);
 	}
-
 	return slot;
 }
-
 
 static void
 luaReScanForeignScan(ForeignScanState *node)
@@ -1197,16 +1087,8 @@ luaReScanForeignScan(ForeignScanState *node)
 	 * return exactly the same rows.
 	 */
 
-	//elog(WARNING, "function %s", __func__);
-
 	scan_state = (LuaFdwScanState *) node->fdw_state;
-	lua_getglobal(scan_state->lua, "ScanRestart");
-
-	if (lua_isfunction(scan_state->lua, -1))
-	{
-		if (lua_pcall(scan_state->lua, 0, 0, 0) != 0)
-			ereport(ERROR, (errcode(ERRCODE_FDW_ERROR), errmsg("lua_fdw lua error: %s", lua_tostring(scan_state->lua, -1))));
-	}
+	lua_callback(scan_state->lua, "ScanRestart", 0, 0);
 }
 
 
@@ -1221,20 +1103,8 @@ luaEndForeignScan(ForeignScanState *node)
 	 * remote servers should be cleaned up.
 	 */
 
-	//elog(WARNING, "function %s", __func__);
-
 	scan_state = (LuaFdwScanState *) node->fdw_state;
-	lua_getglobal(scan_state->lua, "ScanEnd");
-
-	if (lua_isfunction(scan_state->lua, -1))
-	{
-		if (lua_pcall(scan_state->lua, 0, 0, 0) != 0)
-			ereport(ERROR, (errcode(ERRCODE_FDW_ERROR), errmsg("lua_fdw lua error: %s", lua_tostring(scan_state->lua, -1))));
-	}
-	else
-	{
-		lua_pop(scan_state->lua, 1);
-	}
+	lua_callback(scan_state->lua, "ScanEnd", 0, 0);
 
 	lua_stop(scan_state->lua);
 	node->fdw_state = NULL;
@@ -1551,6 +1421,8 @@ luaIsForeignRelUpdatable(Relation rel)
 	 */
 
 	//elog(WARNING, "function %s", __func__);
+
+
 
 //	lua_getglobal(lua, "IsForeignRelUpdatable");
 //
