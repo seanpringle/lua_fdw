@@ -54,6 +54,7 @@ The FDW looks for named Lua callback functions to be handle each stage of query 
 | `ScanIterate()` | Table (row) | Table Scan | Return the next available row, keys = column names, values = anything scalar. Missing columns are assumed to be NULL |
 | `ScanRestart()` | N/A | Table Scan | Restart the current table scan from the beginning |
 | `ScanEnd()` | N/A | Table Scan | Close/free any resources used for the current table scan |
+| `ScanExplain()` | Text | EXPLAIN | Return something useful to show in EXPLAIN output |
 
 A global Lua table called `fdw` exposes information about the table and query. Some fields:
 
