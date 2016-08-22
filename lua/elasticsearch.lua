@@ -18,9 +18,9 @@ elasticsearch = require("elasticsearch")
 
 remap = { }
 proto = "http"
-host = "ne4-stp900a"
+host = "localhost"
 port = 9200
-index = "rsyslog"
+index = nil
 
 function EstimateRowCount ()
   return 1
