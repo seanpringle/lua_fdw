@@ -39,7 +39,6 @@ function EstimateTotalCost ()
 end
 
 function ScanStart ()
-  rows = 0
 
   client = elasticsearch.client({
     hosts = {
@@ -122,7 +121,6 @@ function ScanIterate ()
   end
 
   if #data > 0 then
-    rows = rows + 1
     local cell = table.remove(data, #data)
     local row = { }
     for column, data_type in pairs(fdw.columns) do
@@ -133,16 +131,17 @@ function ScanIterate ()
   end
 end
 
-function ScanRestart ()
-  ScanStart()
-end
-
 function ScanEnd ()
   client:clearScroll({
     scroll_id = scroll_id
   })
 end
 
+function ScanRestart ()
+  ScanEnd()
+  ScanStart()
+end
+
 function ScanExplain ()
-  return json.encode({ columns = fdw.columns, clauses = fdw.clauses, filters = filters})
+  return json.encode(filters)
 end
