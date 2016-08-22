@@ -24,9 +24,9 @@ REGRESS_OPTS = --inputdir=test --outputdir=test \
 MODULE_big      = $(EXTENSION)
 OBJS         =  $(patsubst %.c,%.o,$(wildcard src/*.c))
 PG_CONFIG    = pg_config
-PG_CPPFLAGS  = -I/usr/include/lua5.2
-PG_LIBS      = -llua5.2
-SHLIB_LINK   = -llua5.2
+#PG_CPPFLAGS  = -I/usr/include/lua5.2
+PG_LIBS      = -llua
+SHLIB_LINK   = -llua
 
 all: sql/$(EXTENSION)--$(EXTVERSION).sql
 
