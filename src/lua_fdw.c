@@ -818,6 +818,8 @@ luaGetForeignPlan (
 					id = ((Const*)arg2)->consttype;
 					attno = ((Var*)arg1)->varattno-1;
 
+					elog(WARNING, "%d %d", id, op->opno);
+
 					is_like =
 						op->opno == OID_TEXT_LIKE_OP
 					;
@@ -827,37 +829,43 @@ luaGetForeignPlan (
 						|| op->opno == Int4EqualOperator
 						|| op->opno == TextEqualOperator
 						|| op->opno == 2060 // timestamp_eq
+						|| op->opno == 2386 // timestamptz_eq
 					;
 
 					is_ne =
 						op->opno == 36 // int48ne
 						|| op->opno == 518 // int4ne
 						|| op->opno == 531 // textne
-						|| op->opno == 2060 // timestamp_eq
+						|| op->opno == 2060 // timestamp_ne
+						|| op->opno == 1321 // timestamptz_ne
 					;
 
 					is_gt =
 						op->opno == 512 // int4gt
 						|| op->opno == 413 // int8gt
 						|| op->opno == 2064 // timestamp_gt
+						|| op->opno == 1324 // timestamptz_gt
 					;
 
 					is_gte =
 						op->opno == 525 // int4ge
 						|| op->opno == 415 // int8ge
 						|| op->opno == 2065 // timestamp_ge
+						|| op->opno == 1325 // timestamptz_ge
 					;
 
 					is_lt =
 						op->opno == Int4LessOperator
 						|| op->opno == Int8LessOperator
 						|| op->opno == 2062 // timestamp_lt
+						|| op->opno == 1322 // timestamptz_lt
 					;
 
 					is_lte =
 						op->opno == 523 // int4le
 						|| op->opno == 414 // int8le
 						|| op->opno == 2063 // timestamp_le
+						|| op->opno == 1323 // timestamptz_le
 					;
 
 					if (swap)
