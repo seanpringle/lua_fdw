@@ -96,6 +96,7 @@ function ScanStart ()
     search_type = "scan",
     scroll = "1m",
     body = {
+      size = 1000,
       query = {
         bool = {
           filter = filters,
