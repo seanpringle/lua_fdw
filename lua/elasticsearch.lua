@@ -42,7 +42,7 @@ hosts = {
 -- Re-map Postgres columns to Elasticsearch fields, eg: stamp = "@timestamp"
 remap = { }
 
-function ScanStart ()
+function ScanStart (is_explain)
 
   client = elasticsearch.client({
     hosts = hosts
@@ -96,28 +96,34 @@ function ScanStart ()
     end
   end
 
---  fdw.ereport(fdw.WARNING, json.encode(fdw.clauses))
+  if is_explain then
 
-  data, err = client:search({
-    index = index,
-    search_type = "scan",
-    scroll = "1m",
-    body = {
-      size = 1000,
-      query = {
-        bool = {
-          filter = filters,
+    data = nil
+    scroll_id = nil
+
+  else
+
+    data, err = client:search({
+      index = index,
+      search_type = "scan",
+      scroll = "1m",
+      body = {
+        size = 1000,
+        query = {
+          bool = {
+            filter = filters,
+          }
         }
       }
-    }
-  })
+    })
 
-  if data == nil then
-    fdw.ereport(fdw.ERROR, err)
-    scroll_id = nil
-  else
-    scroll_id = data["_scroll_id"]
-    data = { }
+    if data == nil then
+      fdw.ereport(fdw.ERROR, err)
+      scroll_id = nil
+    else
+      scroll_id = data["_scroll_id"]
+      data = { }
+    end
   end
 end
 
@@ -126,21 +132,17 @@ function ScanIterate ()
   if scroll_id then
 
     if #data == 0 then
-
       local chunk, err = client:scroll({
         scroll_id = scroll_id,
         scroll = "1m",
       })
-
       if chunk and #chunk["hits"]["hits"] > 0 then
         data = chunk["hits"]["hits"]
       end
     end
 
     if #data > 0 then
-
       local cell = table.remove(data, #data)
-
       local row = { }
       for column, data_type in pairs(fdw.columns) do
         local field = remap[column] or column
@@ -152,9 +154,11 @@ function ScanIterate ()
 end
 
 function ScanEnd ()
-  client:clearScroll({
-    scroll_id = scroll_id
-  })
+  if scroll_id then
+    client:clearScroll({
+      scroll_id = scroll_id
+    })
+  end
 end
 
 function ScanRestart ()

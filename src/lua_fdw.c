@@ -321,9 +321,11 @@ static const struct luaFdwOption valid_options[] = {
 int
 lua_callback (lua_State *lua, const char *func, int args, int results)
 {
+	int argf = -(args+1);
 	lua_getglobal(lua, func);
+	lua_insert(lua, argf);
 
-	if (lua_isfunction(lua, -1))
+	if (lua_isfunction(lua, argf))
 	{
 		if (lua_pcall(lua, args, results, 0) == 0)
 			return 1;
@@ -332,7 +334,7 @@ lua_callback (lua_State *lua, const char *func, int args, int results)
 	}
 	else
 	{
-		lua_pop(lua, 1);
+		lua_pop(lua, args+1);
 	}
 	return 0;
 }
@@ -1003,7 +1005,8 @@ luaBeginForeignScan (ForeignScanState *node, int eflags)
 	node->fdw_state = scan_state;
 	scan_state->lua = (lua_State*)plan->fdw_private;
 
-	lua_callback(scan_state->lua, "ScanStart", 0, 0);
+	lua_pushboolean(scan_state->lua, eflags & EXEC_FLAG_EXPLAIN_ONLY ? 1:0);
+	lua_callback(scan_state->lua, "ScanStart", 1, 0);
 }
 
 static TupleTableSlot *
