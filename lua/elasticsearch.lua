@@ -65,7 +65,7 @@ function ScanStart ()
     end
 
     if clause.operator == "eq" then
-      table.insert(filters, { term = { [field] = value }})
+      table.insert(filters, { match = { [field] = value }})
     end
     if clause.operator == "lt" then
       table.insert(filters, { range = { [field] = { lt = value }}})
