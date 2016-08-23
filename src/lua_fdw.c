@@ -641,6 +641,10 @@ luaGetForeignRelSize (PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid
 				lua_pushstring(lua, "timestamp");
 				break;
 
+			case TIMESTAMPTZOID:
+				lua_pushstring(lua, "timestamptz");
+				break;
+
 			default:
 				lua_pushstring(lua, "text");
 		}
@@ -867,7 +871,7 @@ luaGetForeignPlan (
 					}
 
 					if ((is_eq || is_ne || is_like || is_lt || is_gt || is_lte || is_gte)
-						&& (id == TEXTOID || id == INT4OID || id == INT8OID || id == TIMESTAMPOID))
+						&& (id == TEXTOID || id == INT4OID || id == INT8OID || id == TIMESTAMPOID || id == TIMESTAMPTZOID))
 					{
 						lua_pushnumber(lua, clause++);
 						lua_createtable(lua, 0, 0);
@@ -900,6 +904,10 @@ luaGetForeignPlan (
 								lua_pushstring(lua, "timestamp");
 								break;
 
+							case TIMESTAMPTZOID:
+								lua_pushstring(lua, "timestamptz");
+								break;
+
 							default:
 								lua_pushstring(lua, "text");
 						}
@@ -920,6 +928,10 @@ luaGetForeignPlan (
 
 							case TIMESTAMPOID:
 								lua_pushstring(lua, DatumGetCString(DirectFunctionCall1(timestamp_out, ((Const*)arg2)->constvalue)));
+								break;
+
+							case TIMESTAMPTZOID:
+								lua_pushstring(lua, DatumGetCString(DirectFunctionCall1(timestamptz_out, ((Const*)arg2)->constvalue)));
 								break;
 
 							default:
