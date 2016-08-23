@@ -68,7 +68,9 @@ function ScanStart ()
         -- other patterns to wildcard
         value = clause.constant:gsub("_", "?")
         value = clause.constant:gsub("%%", "*")
-        table.insert(filters, { wildcard = { [field] = value }})
+        for word in value:gmatch("%S+") do
+          table.insert(filters, { wildcard = { [field] = word }})
+        end
       end
     end
 
