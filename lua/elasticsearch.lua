@@ -74,7 +74,7 @@ function ScanStart ()
       end
     end
 
-    if fdw.columns[clause.column] == "timestamp" then
+    if fdw.columns[clause.column]:match("timestamp") then
       value = clause.constant:gsub(" ", "T")
     end
 
@@ -163,5 +163,5 @@ function ScanRestart ()
 end
 
 function ScanExplain ()
-  return json.encode(filters)
+  return json.encode(fdw.clauses)
 end
