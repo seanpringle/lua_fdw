@@ -818,7 +818,7 @@ luaGetForeignPlan (
 					id = ((Const*)arg2)->consttype;
 					attno = ((Var*)arg1)->varattno-1;
 
-					elog(WARNING, "%d %d", id, op->opno);
+					//elog(WARNING, "%d %d", id, op->opno);
 
 					is_like =
 						op->opno == OID_TEXT_LIKE_OP
