@@ -56,8 +56,15 @@ function ScanStart ()
     local value = clause.constant
 
     if clause.operator == "like" then
-      value = clause.constant:gsub("%%", "*")
-      table.insert(filters, { match = { [field] = value }})
+      if value:match("^[^%%]+%%$") then
+        -- convert "abc%" to prefix
+        table.insert(filters, { prefix = { [field] = value:gsub("%%", "") }})
+      else
+        -- other patterns to wildcard
+        value = clause.constant:gsub("_", "?")
+        value = clause.constant:gsub("%%", "*")
+        table.insert(filters, { wildcard = { [field] = value }})
+      end
     end
 
     if fdw.columns[clause.column] == "timestamp" then
@@ -65,6 +72,7 @@ function ScanStart ()
     end
 
     if clause.operator == "eq" then
+      -- full text. intuitive if { index: not_analyzed } ES fields
       table.insert(filters, { match = { [field] = value }})
     end
     if clause.operator == "lt" then
