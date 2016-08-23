@@ -35,10 +35,9 @@ json = require('cjson')
 elasticsearch = require("elasticsearch")
 
 -- Connection. Override via 'inject' option on each foreign table
-proto = "http"
-host  = "localhost"
-port  = 9200
-index = nil
+hosts = {
+  { protocol = "http", host = "localhost", port = 9200 },
+}
 
 -- Re-map Postgres columns to Elasticsearch fields, eg: stamp = "@timestamp"
 remap = { }
@@ -46,13 +45,7 @@ remap = { }
 function ScanStart ()
 
   client = elasticsearch.client({
-    hosts = {
-      {
-        protocol = proto,
-        host = host,
-        port = port
-      }
-    },
+    hosts = hosts
   })
 
   filters = { }
