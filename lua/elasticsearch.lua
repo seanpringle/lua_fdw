@@ -167,5 +167,5 @@ function ScanRestart ()
 end
 
 function ScanExplain ()
-  return json.encode(fdw.clauses)
+  return json.encode(filters)
 end
