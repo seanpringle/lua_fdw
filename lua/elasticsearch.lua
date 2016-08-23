@@ -50,6 +50,11 @@ function ScanStart ()
 
   filters = { }
 
+  -- lua_fdw exposes simple top-level WHERE clauses of the form:
+  -- "column" (eq/ne/lt/gt/lte/gte/like) "constant". Try to
+  -- convert them to Elasticsearch query filters. False-positive
+  -- results are fine (opposite situation is not!)
+
   for i, clause in ipairs(fdw.clauses) do
 
     local field = remap[clause.column] or clause.column
@@ -107,6 +112,7 @@ function ScanStart ()
 
   if data == nil then
     fdw.ereport(fdw.ERROR, err)
+    scroll_id = nil
   else
     scroll_id = data["_scroll_id"]
     data = { }
@@ -115,26 +121,31 @@ end
 
 function ScanIterate ()
 
-  if #data == 0 and scroll_id then
+  if scroll_id then
 
-    local chunk, err = client:scroll({
-      scroll_id = scroll_id,
-      scroll = "1m",
-    })
+    if #data == 0 then
 
-    if chunk and #chunk["hits"]["hits"] > 0 then
-      data = chunk["hits"]["hits"]
+      local chunk, err = client:scroll({
+        scroll_id = scroll_id,
+        scroll = "1m",
+      })
+
+      if chunk and #chunk["hits"]["hits"] > 0 then
+        data = chunk["hits"]["hits"]
+      end
     end
-  end
 
-  if #data > 0 then
-    local cell = table.remove(data, #data)
-    local row = { }
-    for column, data_type in pairs(fdw.columns) do
-      local field = remap[column] or column
-      row[column] = cell["_source"][field]
+    if #data > 0 then
+
+      local cell = table.remove(data, #data)
+
+      local row = { }
+      for column, data_type in pairs(fdw.columns) do
+        local field = remap[column] or column
+        row[column] = cell["_source"][field]
+      end
+      return row
     end
-    return row
   end
 end
 
