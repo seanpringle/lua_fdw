@@ -574,6 +574,15 @@ luaGetForeignRelSize (PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid
 	lua_State *lua;
 	int i;
 
+	ListCell *lc;
+	RestrictInfo *rinfo;
+	OpExpr *op;
+	Node *arg1, *arg2;
+	int attno, clause, swap;
+	int is_eq, is_ne, is_like, is_lt, is_gt, is_lte, is_gte;
+	Oid id;
+	char scratch[50];
+
 	/*
 	 * Obtain relation size estimates for a foreign table. This is called at
 	 * the beginning of planning for a query that scans a foreign table. root
@@ -654,145 +663,11 @@ luaGetForeignRelSize (PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid
 	}
 	lua_settable(lua, -3); // columns
 
-	lua_pop(lua, 1); // fdw
-
-	if (lua_callback(lua, "EstimateRowCount", 0, 1))
-	{
-		if (lua_isnumber(lua, -1))
-			baserel->rows = lua_tonumber(lua, -1);
-
-		lua_pop(lua, 1);
-	}
-
-	if (lua_callback(lua, "EstimateRowWidth", 0, 1))
-	{
-		if (lua_isnumber(lua, -1))
-			baserel->width = lua_tonumber(lua, -1);
-
-		lua_pop(lua, 1);
-	}
-
-	heap_close(rel, AccessShareLock);
-}
-
-static void
-luaGetForeignPaths (PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid)
-{
-	LuaFdwPlanState *plan_state;
-	Cost startup_cost, total_cost;
-
-	/*
-	 * Create possible access paths for a scan on a foreign table. This is
-	 * called during query planning. The parameters are the same as for
-	 * GetForeignRelSize, which has already been called.
-	 *
-	 * This function must generate at least one access path (ForeignPath node)
-	 * for a scan on the foreign table and must call add_path to add each such
-	 * path to baserel->pathlist. It's recommended to use
-	 * create_foreignscan_path to build the ForeignPath nodes. The function
-	 * can generate multiple access paths, e.g., a path which has valid
-	 * pathkeys to represent a pre-sorted result. Each access path must
-	 * contain cost estimates, and can contain any FDW-private information
-	 * that is needed to identify the specific scan method intended.
-	 */
-
-	plan_state = baserel->fdw_private;
-
-	startup_cost = 0;
-	total_cost = startup_cost + baserel->rows;
-
-	if (lua_callback(plan_state->lua, "EstimateStartupCost", 0, 1))
-	{
-		if (lua_isnumber(plan_state->lua, -1))
-			startup_cost = lua_tonumber(plan_state->lua, -1);
-
-		lua_pop(plan_state->lua, 1);
-	}
-
-	if (lua_callback(plan_state->lua, "EstimateTotalCost", 0, 1))
-	{
-		if (lua_isnumber(plan_state->lua, -1))
-			total_cost = lua_tonumber(plan_state->lua, -1);
-
-		lua_pop(plan_state->lua, 1);
-	}
-
-	/* Create a ForeignPath node and add it as only possible path */
-	add_path(baserel, (Path *)
-			 create_foreignscan_path(root, baserel,
-#if (PG_VERSION_NUM >= 90600)
-									 NULL,      /* default pathtarget */
-#endif
-									 baserel->rows,
-									 startup_cost,
-									 total_cost,
-									 NIL,		/* no pathkeys */
-									 NULL,		/* no outer rel either */
-#if (PG_VERSION_NUM >= 90500)
-									 NULL,      /* no extra plan */
-#endif
-									 NIL));		/* no fdw_private data */
-}
-
-static ForeignScan *
-luaGetForeignPlan (
-	PlannerInfo *root,
-	RelOptInfo *baserel,
-	Oid foreigntableid,
-	ForeignPath *best_path,
-	List *tlist,
-	List *scan_clauses,
-	Plan *outer_plan
-){
-	LuaFdwPlanState *plan_state;
-	lua_State *lua;
-	ListCell *lc;
-	RestrictInfo *rinfo;
-	OpExpr *op;
-	Node *arg1, *arg2;
-	Relation rel;
-	TupleDesc desc;
-	int attno, clause, swap;
-	int is_eq, is_ne, is_like, is_lt, is_gt, is_lte, is_gte;
-	Oid id;
-	char scratch[50];
-
-	/*
-	 * Create a ForeignScan plan node from the selected foreign access path.
-	 * This is called at the end of query planning. The parameters are as for
-	 * GetForeignRelSize, plus the selected ForeignPath (previously produced
-	 * by GetForeignPaths), the target list to be emitted by the plan node,
-	 * and the restriction clauses to be enforced by the plan node.
-	 *
-	 * This function must create and return a ForeignScan plan node; it's
-	 * recommended to use make_foreignscan to build the ForeignScan node.
-	 *
-	 */
-
-	Index scan_relid = baserel->relid;
-
-	/*
-	 * We have no native ability to evaluate restriction clauses, so we just
-	 * put all the scan_clauses into the plan node's qual list for the
-	 * executor to check. So all we have to do here is strip RestrictInfo
-	 * nodes from the clauses and ignore pseudoconstants (which will be
-	 * handled elsewhere).
-	 */
-
-	plan_state = baserel->fdw_private;
-	lua = plan_state->lua;
-	//pfree(plan_state);
-	baserel->fdw_private = NULL;
-
-	rel = heap_open(foreigntableid, AccessShareLock);
-	desc = RelationGetDescr(rel);
-
-	lua_getglobal(lua, "fdw");
 	lua_pushstring(lua, "clauses");
 	lua_createtable(lua, 0, 0);
 	clause = 1;
 
-	foreach(lc, scan_clauses)
+	foreach(lc, baserel->baserestrictinfo)
 	{
 		rinfo = (RestrictInfo *) lfirst(lc);
 		Assert(IsA(rinfo, RestrictInfo));
@@ -957,9 +832,125 @@ luaGetForeignPlan (
 	}
 
 	lua_settable(lua, -3); // clauses
-	lua_pop(lua, 1);
+	lua_pop(lua, 1); // fdw
 
 	heap_close(rel, AccessShareLock);
+
+	if (lua_callback(lua, "EstimateRowCount", 0, 1))
+	{
+		if (lua_isnumber(lua, -1))
+			baserel->rows = lua_tonumber(lua, -1);
+
+		lua_pop(lua, 1);
+	}
+
+	if (lua_callback(lua, "EstimateRowWidth", 0, 1))
+	{
+		if (lua_isnumber(lua, -1))
+			baserel->width = lua_tonumber(lua, -1);
+
+		lua_pop(lua, 1);
+	}
+}
+
+static void
+luaGetForeignPaths (PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid)
+{
+	LuaFdwPlanState *plan_state;
+	lua_State *lua;
+	Cost startup_cost, total_cost;
+
+	/*
+	 * Create possible access paths for a scan on a foreign table. This is
+	 * called during query planning. The parameters are the same as for
+	 * GetForeignRelSize, which has already been called.
+	 *
+	 * This function must generate at least one access path (ForeignPath node)
+	 * for a scan on the foreign table and must call add_path to add each such
+	 * path to baserel->pathlist. It's recommended to use
+	 * create_foreignscan_path to build the ForeignPath nodes. The function
+	 * can generate multiple access paths, e.g., a path which has valid
+	 * pathkeys to represent a pre-sorted result. Each access path must
+	 * contain cost estimates, and can contain any FDW-private information
+	 * that is needed to identify the specific scan method intended.
+	 */
+
+	plan_state = baserel->fdw_private;
+	lua = plan_state->lua;
+
+	startup_cost = 0;
+	total_cost = startup_cost + baserel->rows;
+
+	if (lua_callback(lua, "EstimateStartupCost", 0, 1))
+	{
+		if (lua_isnumber(lua, -1))
+			startup_cost = lua_tonumber(lua, -1);
+
+		lua_pop(lua, 1);
+	}
+
+	if (lua_callback(lua, "EstimateTotalCost", 0, 1))
+	{
+		if (lua_isnumber(lua, -1))
+			total_cost = lua_tonumber(lua, -1);
+
+		lua_pop(lua, 1);
+	}
+
+	/* Create a ForeignPath node and add it as only possible path */
+	add_path(baserel, (Path *)
+			 create_foreignscan_path(root, baserel,
+#if (PG_VERSION_NUM >= 90600)
+									 NULL,      /* default pathtarget */
+#endif
+									 baserel->rows,
+									 startup_cost,
+									 total_cost,
+									 NIL,		/* no pathkeys */
+									 NULL,		/* no outer rel either */
+#if (PG_VERSION_NUM >= 90500)
+									 NULL,      /* no extra plan */
+#endif
+									 NIL));		/* no fdw_private data */
+}
+
+static ForeignScan *
+luaGetForeignPlan (
+	PlannerInfo *root,
+	RelOptInfo *baserel,
+	Oid foreigntableid,
+	ForeignPath *best_path,
+	List *tlist,
+	List *scan_clauses,
+	Plan *outer_plan
+){
+	LuaFdwPlanState *plan_state;
+	lua_State *lua;
+
+	/*
+	 * Create a ForeignScan plan node from the selected foreign access path.
+	 * This is called at the end of query planning. The parameters are as for
+	 * GetForeignRelSize, plus the selected ForeignPath (previously produced
+	 * by GetForeignPaths), the target list to be emitted by the plan node,
+	 * and the restriction clauses to be enforced by the plan node.
+	 *
+	 * This function must create and return a ForeignScan plan node; it's
+	 * recommended to use make_foreignscan to build the ForeignScan node.
+	 *
+	 */
+
+	Index scan_relid = baserel->relid;
+
+	/*
+	 * We have no native ability to evaluate restriction clauses, so we just
+	 * put all the scan_clauses into the plan node's qual list for the
+	 * executor to check. So all we have to do here is strip RestrictInfo
+	 * nodes from the clauses and ignore pseudoconstants (which will be
+	 * handled elsewhere).
+	 */
+
+	plan_state = baserel->fdw_private;
+	lua = plan_state->lua;
 
 	scan_clauses = extract_actual_clauses(scan_clauses, false);
 
