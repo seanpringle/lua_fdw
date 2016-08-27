@@ -157,6 +157,8 @@ function ScanIterate ()
         row[column] = cell["_source"][field]
       end
       return row
+    else
+      ScanEnd()
     end
   end
 end
@@ -167,6 +169,8 @@ function ScanEnd ()
       scroll_id = scroll_id
     })
   end
+  scroll_id = nil
+  data = nil
 end
 
 function ScanRestart ()
