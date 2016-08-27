@@ -43,7 +43,7 @@ hosts = {
 remap = { }
 
 -- Scroll delay
-scroll_delay = "1h"
+scroll = "1h"
 
 function ScanStart (is_explain)
 
@@ -109,7 +109,7 @@ function ScanStart (is_explain)
     data, err = client:search({
       index = index,
       search_type = "scan",
-      scroll = scroll_delay,
+      scroll = scroll,
       body = {
         size = 1000,
         query = {
@@ -137,7 +137,7 @@ function ScanIterate ()
     if #data == 0 then
       local chunk, err = client:scroll({
         scroll_id = scroll_id,
-        scroll = scroll_delay,
+        scroll = scroll,
       })
       if chunk and #chunk["hits"]["hits"] > 0 then
         data = chunk["hits"]["hits"]
