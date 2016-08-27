@@ -43,7 +43,7 @@ hosts = {
 remap = { }
 
 -- Scroll delay
-scroll = "1h"
+scroll = "1m"
 
 function ScanStart (is_explain)
 
@@ -157,9 +157,9 @@ function ScanIterate ()
         row[column] = cell["_source"][field]
       end
       return row
-    else
-      ScanEnd()
     end
+
+    ScanEnd()
   end
 end
 
@@ -168,9 +168,8 @@ function ScanEnd ()
     client:clearScroll({
       scroll_id = scroll_id
     })
+    scroll_id = nil
   end
-  scroll_id = nil
-  data = nil
 end
 
 function ScanRestart ()
