@@ -559,76 +559,23 @@ lua_fdw_validator (PG_FUNCTION_ARGS)
 	PG_RETURN_VOID();
 }
 
-static void
-luaGetForeignRelSize (PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid)
+static
+void lua_clauses(lua_State *lua, RelOptInfo *baserel, Oid foreigntableid)
 {
-	LuaFdwPlanState *plan_state;
-	ForeignTable *table;
-	ListCell *cell;
 	Relation rel;
 	TupleDesc desc;
-	const char *script = NULL;
-	const char *inject = NULL;
-	const char *lua_path = NULL;
-	const char *lua_cpath = NULL;
-	lua_State *lua;
-	int i;
 
 	ListCell *lc;
 	RestrictInfo *rinfo;
 	OpExpr *op;
 	Node *arg1, *arg2;
-	int attno, clause, swap;
+	int i, attno, clause, swap;
 	int is_eq, is_ne, is_like, is_lt, is_gt, is_lte, is_gte;
 	Oid id;
 	char scratch[50];
 
-	/*
-	 * Obtain relation size estimates for a foreign table. This is called at
-	 * the beginning of planning for a query that scans a foreign table. root
-	 * is the planner's global information about the query; baserel is the
-	 * planner's information about this table; and foreigntableid is the
-	 * pg_class OID of the foreign table. (foreigntableid could be obtained
-	 * from the planner data structures, but it's passed explicitly to save
-	 * effort.)
-	 *
-	 * This function should update baserel->rows to be the expected number of
-	 * rows returned by the table scan, after accounting for the filtering
-	 * done by the restriction quals. The initial value of baserel->rows is
-	 * just a constant default estimate, which should be replaced if at all
-	 * possible. The function may also choose to update baserel->width if it
-	 * can compute a better estimate of the average result row width.
-	 */
-
 	rel = heap_open(foreigntableid, AccessShareLock);
 	desc = RelationGetDescr(rel);
-
-	table = GetForeignTable(foreigntableid);
-
-	foreach(cell, table->options)
-	{
-		DefElem *def = (DefElem *) lfirst(cell);
-
-		if (strcmp(def->defname, "script") == 0)
-			script = defGetString(def);
-
-		if (strcmp(def->defname, "inject") == 0)
-			inject = defGetString(def);
-
-		if (strcmp(def->defname, "lua_path") == 0)
-			lua_path = defGetString(def);
-
-		if (strcmp(def->defname, "lua_cpath") == 0)
-			lua_cpath = defGetString(def);
-	}
-
-	plan_state = palloc0(sizeof(LuaFdwPlanState));
-	baserel->fdw_private = (void *) plan_state;
-	baserel->rows = 0;
-
-	/* initialize required state in plan_state */
-
-	lua = plan_state->lua = lua_start(script, inject, lua_path, lua_cpath);
 
 	lua_getglobal(lua, "fdw");
 
@@ -835,6 +782,66 @@ luaGetForeignRelSize (PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid
 	lua_pop(lua, 1); // fdw
 
 	heap_close(rel, AccessShareLock);
+}
+
+static void
+luaGetForeignRelSize (PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid)
+{
+	LuaFdwPlanState *plan_state;
+	ForeignTable *table;
+	ListCell *cell;
+	const char *script = NULL;
+	const char *inject = NULL;
+	const char *lua_path = NULL;
+	const char *lua_cpath = NULL;
+	lua_State *lua;
+
+	/*
+	 * Obtain relation size estimates for a foreign table. This is called at
+	 * the beginning of planning for a query that scans a foreign table. root
+	 * is the planner's global information about the query; baserel is the
+	 * planner's information about this table; and foreigntableid is the
+	 * pg_class OID of the foreign table. (foreigntableid could be obtained
+	 * from the planner data structures, but it's passed explicitly to save
+	 * effort.)
+	 *
+	 * This function should update baserel->rows to be the expected number of
+	 * rows returned by the table scan, after accounting for the filtering
+	 * done by the restriction quals. The initial value of baserel->rows is
+	 * just a constant default estimate, which should be replaced if at all
+	 * possible. The function may also choose to update baserel->width if it
+	 * can compute a better estimate of the average result row width.
+	 */
+
+
+	table = GetForeignTable(foreigntableid);
+
+	foreach(cell, table->options)
+	{
+		DefElem *def = (DefElem *) lfirst(cell);
+
+		if (strcmp(def->defname, "script") == 0)
+			script = defGetString(def);
+
+		if (strcmp(def->defname, "inject") == 0)
+			inject = defGetString(def);
+
+		if (strcmp(def->defname, "lua_path") == 0)
+			lua_path = defGetString(def);
+
+		if (strcmp(def->defname, "lua_cpath") == 0)
+			lua_cpath = defGetString(def);
+	}
+
+	plan_state = palloc0(sizeof(LuaFdwPlanState));
+	baserel->fdw_private = (void *) plan_state;
+	baserel->rows = 0;
+
+	/* initialize required state in plan_state */
+
+	lua = plan_state->lua = lua_start(script, inject, lua_path, lua_cpath);
+
+	lua_clauses(lua, baserel, foreigntableid);
 
 	if (lua_callback(lua, "EstimateRowCount", 0, 1))
 	{
@@ -877,6 +884,8 @@ luaGetForeignPaths (PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid)
 
 	plan_state = baserel->fdw_private;
 	lua = plan_state->lua;
+
+	lua_clauses(lua, baserel, foreigntableid);
 
 	startup_cost = 0;
 	total_cost = startup_cost + baserel->rows;
@@ -951,6 +960,8 @@ luaGetForeignPlan (
 
 	plan_state = baserel->fdw_private;
 	lua = plan_state->lua;
+
+	lua_clauses(lua, baserel, foreigntableid);
 
 	scan_clauses = extract_actual_clauses(scan_clauses, false);
 
