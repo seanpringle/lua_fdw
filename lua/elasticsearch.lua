@@ -99,12 +99,20 @@ function ScanStart (is_explain)
     end
   end
 
-  if is_explain then
+  data = nil
+  scroll_id = nil
+  auto_start = true
+end
 
-    data = nil
-    scroll_id = nil
+function ScanIterate ()
 
-  else
+  -- Don't start the scroll until necessary. For simple queries this
+  -- doesn't matter since iteration will commence immediately, but for
+  -- complex analytics queries with multiple concurrent Elasticsearch
+  -- scrolls, Postgres calls ScanStart on each FDW immediately yet may
+  -- not start iterating until much later in the execution plan.
+  if auto_start then
+    auto_start = false
 
     data, err = client:search({
       index = index,
@@ -128,9 +136,6 @@ function ScanStart (is_explain)
       data = { }
     end
   end
-end
-
-function ScanIterate ()
 
   if scroll_id then
 
