@@ -42,6 +42,9 @@ hosts = {
 -- Re-map Postgres columns to Elasticsearch fields, eg: stamp = "@timestamp"
 remap = { }
 
+-- Scroll delay
+scroll_delay = "1h"
+
 function ScanStart (is_explain)
 
   client = elasticsearch.client({
@@ -106,7 +109,7 @@ function ScanStart (is_explain)
     data, err = client:search({
       index = index,
       search_type = "scan",
-      scroll = "1m",
+      scroll = scroll_delay,
       body = {
         size = 1000,
         query = {
@@ -134,7 +137,7 @@ function ScanIterate ()
     if #data == 0 then
       local chunk, err = client:scroll({
         scroll_id = scroll_id,
-        scroll = "1m",
+        scroll = scroll_delay,
       })
       if chunk and #chunk["hits"]["hits"] > 0 then
         data = chunk["hits"]["hits"]
