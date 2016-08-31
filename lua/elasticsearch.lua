@@ -1,6 +1,6 @@
 ---------------------------------------------------------------------------
 --
--- Lua Foreign Data Wrapper for PostgreSQL
+-- Elasticsearch Foreign Data Wrapper for PostgreSQL
 --
 -- Copyright (c) 2016 Sean Pringle (lua_fdw)
 --
