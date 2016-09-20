@@ -39,6 +39,7 @@
 #include "utils/lsyscache.h"
 #include "utils/timestamp.h"
 #include "funcapi.h"
+#include "nodes/makefuncs.h"
 
 PG_MODULE_MAGIC;
 
@@ -812,7 +813,7 @@ luaGetForeignRelSize (PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid
 	 * possible. The function may also choose to update baserel->width if it
 	 * can compute a better estimate of the average result row width.
 	 */
-
+	//elog(WARNING, "%s", __func__);
 
 	table = GetForeignTable(foreigntableid);
 
@@ -881,6 +882,7 @@ luaGetForeignPaths (PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid)
 	 * contain cost estimates, and can contain any FDW-private information
 	 * that is needed to identify the specific scan method intended.
 	 */
+	//elog(WARNING, "%s", __func__);
 
 	plan_state = baserel->fdw_private;
 	lua = plan_state->lua;
@@ -935,6 +937,7 @@ luaGetForeignPlan (
 ){
 	LuaFdwPlanState *plan_state;
 	lua_State *lua;
+	List *private_state = NULL;
 
 	/*
 	 * Create a ForeignScan plan node from the selected foreign access path.
@@ -957,6 +960,7 @@ luaGetForeignPlan (
 	 * nodes from the clauses and ignore pseudoconstants (which will be
 	 * handled elsewhere).
 	 */
+	//elog(WARNING, "%s", __func__);
 
 	plan_state = baserel->fdw_private;
 	lua = plan_state->lua;
@@ -964,6 +968,7 @@ luaGetForeignPlan (
 	lua_clauses(lua, baserel, foreigntableid);
 
 	scan_clauses = extract_actual_clauses(scan_clauses, false);
+	private_state = lappend(private_state, makeConst(VOIDOID, -1, InvalidOid, -1, PointerGetDatum(lua), false, true));
 
 	/* Create the ForeignScan node */
 	return make_foreignscan(
@@ -971,7 +976,7 @@ luaGetForeignPlan (
 		scan_clauses,
 		scan_relid,
 		NIL,	/* no expressions to evaluate */
-		(List*)lua,	/* private state */
+		private_state,	/* private state */
 		NIL,	/* no custom tlist */
 		NIL,    /* no remote quals */
 		outer_plan
@@ -1002,10 +1007,12 @@ luaBeginForeignScan (ForeignScanState *node, int eflags)
 	 * ExplainForeignScan and EndForeignScan.
 	 *
 	 */
+	//elog(WARNING, "%s", __func__);
 
 	scan_state = palloc0(sizeof(LuaFdwScanState));
 	node->fdw_state = scan_state;
-	scan_state->lua = (lua_State*)plan->fdw_private;
+
+	scan_state->lua = (lua_State*) DatumGetPointer(((Const*)(linitial(plan->fdw_private)))->constvalue);
 
 	lua_pushboolean(scan_state->lua, eflags & EXEC_FLAG_EXPLAIN_ONLY ? 1:0);
 	lua_callback(scan_state->lua, "ScanStart", 1, 0);
@@ -1049,6 +1056,7 @@ luaIterateForeignScan(ForeignScanState *node)
 	 * that none should be present, it may be appropriate to raise an error
 	 * (just as you would need to do in the case of a data type mismatch).
 	 */
+	//elog(WARNING, "%s", __func__);
 
 	slot = node->ss.ss_ScanTupleSlot;
 	desc = slot->tts_tupleDescriptor;
@@ -1106,6 +1114,7 @@ luaReScanForeignScan(ForeignScanState *node)
 {
 	LuaFdwScanState *scan_state;
 
+	//elog(WARNING, "%s", __func__);
 	/*
 	 * Restart the scan from the beginning. Note that any parameters the scan
 	 * depends on may have changed value, so the new scan does not necessarily
@@ -1116,12 +1125,12 @@ luaReScanForeignScan(ForeignScanState *node)
 	lua_callback(scan_state->lua, "ScanRestart", 0, 0);
 }
 
-
 static void
 luaEndForeignScan(ForeignScanState *node)
 {
 	LuaFdwScanState *scan_state;
 
+	//elog(WARNING, "%s", __func__);
 	/*
 	 * End the scan and release resources. It is normally not important to
 	 * release palloc'd memory, but for example open files and connections to
@@ -1134,7 +1143,6 @@ luaEndForeignScan(ForeignScanState *node)
 	lua_stop(scan_state->lua);
 	node->fdw_state = NULL;
 }
-
 
 static void
 luaAddForeignUpdateTargets(Query *parsetree, RangeTblEntry *target_rte, Relation target_relation)
@@ -1166,7 +1174,7 @@ luaAddForeignUpdateTargets(Query *parsetree, RangeTblEntry *target_rte, Relation
 	 * relies on an unchanging primary key to identify rows.)
 	 */
 
-	//elog(WARNING, "function %s", __func__);
+	//elog(WARNING, "%s", __func__);
 
 //	lua_getglobal(lua, "AddForeignUpdateTargets");
 //
@@ -1175,7 +1183,6 @@ luaAddForeignUpdateTargets(Query *parsetree, RangeTblEntry *target_rte, Relation
 //		elog(ERROR, "AddForeignUpdateTargets: %s", lua_tostring(lua, -1));
 //	}
 }
-
 
 static List *
 luaPlanForeignModify(PlannerInfo *root, ModifyTable *plan, Index resultRelation, int subplan_index)
@@ -1200,7 +1207,7 @@ luaPlanForeignModify(PlannerInfo *root, ModifyTable *plan, Index resultRelation,
 	 * BeginForeignModify will be NIL.
 	 */
 
-	//elog(WARNING, "function %s", __func__);
+	//elog(WARNING, "%s", __func__);
 
 //	lua_getglobal(lua, "PlanForeignModify");
 //
@@ -1211,7 +1218,6 @@ luaPlanForeignModify(PlannerInfo *root, ModifyTable *plan, Index resultRelation,
 
 	return NULL;
 }
-
 
 static void
 luaBeginForeignModify(ModifyTableState *mtstate, ResultRelInfo *rinfo, List *fdw_private, int subplan_index, int eflags)
@@ -1243,8 +1249,7 @@ luaBeginForeignModify(ModifyTableState *mtstate, ResultRelInfo *rinfo, List *fdw
 	 * If the BeginForeignModify pointer is set to NULL, no action is taken
 	 * during executor startup.
 	 */
-
-	//elog(WARNING, "function %s", __func__);
+	//elog(WARNING, "%s", __func__);
 
 //	modify_state = palloc0(sizeof(LuaFdwModifyState));
 //	rinfo->ri_FdwState = modify_state;
@@ -1257,7 +1262,6 @@ luaBeginForeignModify(ModifyTableState *mtstate, ResultRelInfo *rinfo, List *fdw
 //		elog(ERROR, "BeginForeignModify: %s", lua_tostring(modify_state->lua, -1));
 //	}
 }
-
 
 static TupleTableSlot *
 luaExecForeignInsert(EState *estate, ResultRelInfo *rinfo, TupleTableSlot *slot, TupleTableSlot *planSlot)
@@ -1290,8 +1294,7 @@ luaExecForeignInsert(EState *estate, ResultRelInfo *rinfo, TupleTableSlot *slot,
 	 * into the foreign table will fail with an error message.
 	 *
 	 */
-
-	//elog(WARNING, "function %s", __func__);
+	//elog(WARNING, "%s", __func__);
 
 //	modify_state = (LuaFdwModifyState *) rinfo->ri_FdwState;
 //	lua_getglobal(modify_state->lua, "ExecForeignInsert");
@@ -1303,7 +1306,6 @@ luaExecForeignInsert(EState *estate, ResultRelInfo *rinfo, TupleTableSlot *slot,
 
 	return slot;
 }
-
 
 static TupleTableSlot *
 luaExecForeignUpdate(EState *estate, ResultRelInfo *rinfo, TupleTableSlot *slot, TupleTableSlot *planSlot)
@@ -1336,8 +1338,7 @@ luaExecForeignUpdate(EState *estate, ResultRelInfo *rinfo, TupleTableSlot *slot,
 	 * foreign table will fail with an error message.
 	 *
 	 */
-
-	//elog(WARNING, "function %s", __func__);
+	//elog(WARNING, "%s", __func__);
 
 //	modify_state = (LuaFdwModifyState *) rinfo->ri_FdwState;
 //	lua_getglobal(modify_state->lua, "ExecForeignUpdate");
@@ -1349,7 +1350,6 @@ luaExecForeignUpdate(EState *estate, ResultRelInfo *rinfo, TupleTableSlot *slot,
 
 	return slot;
 }
-
 
 static TupleTableSlot *
 luaExecForeignDelete(EState *estate, ResultRelInfo *rinfo, TupleTableSlot *slot, TupleTableSlot *planSlot)
@@ -1385,8 +1385,7 @@ luaExecForeignDelete(EState *estate, ResultRelInfo *rinfo, TupleTableSlot *slot,
 	 *	 (LuaFdwModifyState *) rinfo->ri_FdwState;
 	 * ----
 	 */
-
-	//elog(WARNING, "function %s", __func__);
+	//elog(WARNING, "%s", __func__);
 
 //	modify_state = (LuaFdwModifyState *) rinfo->ri_FdwState;
 //	lua_getglobal(modify_state->lua, "ExecForeignDelete");
@@ -1413,8 +1412,7 @@ luaEndForeignModify(EState *estate, ResultRelInfo *rinfo)
 	 * If the EndForeignModify pointer is set to NULL, no action is taken
 	 * during executor shutdown.
 	 */
-
-	//elog(WARNING, "function %s", __func__);
+	//elog(WARNING, "%s", __func__);
 
 //	modify_state = (LuaFdwModifyState *) rinfo->ri_FdwState;
 //	lua_getglobal(modify_state->lua, "EndForeignModify");
@@ -1445,9 +1443,7 @@ luaIsForeignRelUpdatable(Relation rel)
 	 * updatability for display in the information_schema views.)
 	 */
 
-	//elog(WARNING, "function %s", __func__);
-
-
+	//elog(WARNING, "%s", __func__);
 
 //	lua_getglobal(lua, "IsForeignRelUpdatable");
 //
@@ -1458,7 +1454,6 @@ luaIsForeignRelUpdatable(Relation rel)
 
 	return (1 << CMD_UPDATE) | (1 << CMD_INSERT) | (1 << CMD_DELETE);
 }
-
 
 static void
 luaExplainForeignScan (ForeignScanState *node, struct ExplainState * es)
@@ -1476,7 +1471,7 @@ luaExplainForeignScan (ForeignScanState *node, struct ExplainState * es)
 	 * information is printed during EXPLAIN.
 	 */
 
-	//elog(WARNING, "function %s", __func__);
+	//elog(WARNING, "%s", __func__);
 
 	scan_state = (LuaFdwScanState *) node->fdw_state;
 	lua_getglobal(scan_state->lua, "ScanExplain");
@@ -1511,8 +1506,7 @@ luaExplainForeignModify (ModifyTableState *mtstate, ResultRelInfo *rinfo, List *
 	 * If the ExplainForeignModify pointer is set to NULL, no additional
 	 * information is printed during EXPLAIN.
 	 */
-
-	//elog(WARNING, "function %s", __func__);
+	//elog(WARNING, "%s", __func__);
 
 //	modify_state = (LuaFdwModifyState *) rinfo->ri_FdwState;
 //	lua_getglobal(modify_state->lua, "ExplainForeignModify");
@@ -1560,8 +1554,7 @@ luaAnalyzeForeignTable(Relation relation, AcquireSampleRowsFunc *func, BlockNumb
 	 * the FDW does not have any concept of dead rows.)
 	 * ----
 	 */
-
-	//elog(WARNING, "function %s", __func__);
+	//elog(WARNING, "%s", __func__);
 
 //	lua_getglobal(lua, "AnalyzeForeignTable");
 //
@@ -1605,8 +1598,7 @@ luaGetForeignJoinPaths (PlannerInfo *root, RelOptInfo *joinrel, RelOptInfo *oute
 	 * TargetEntry nodes, representing the set of columns it will supply at
 	 * runtime in the tuples it returns.
 	 */
-
-	//elog(WARNING, "function %s", __func__);
+	//elog(WARNING, "%s", __func__);
 
 //	lua_getglobal(lua, "GetForeignJoinPaths");
 //
@@ -1614,7 +1606,6 @@ luaGetForeignJoinPaths (PlannerInfo *root, RelOptInfo *joinrel, RelOptInfo *oute
 //	{
 //		elog(ERROR, "GetForeignJoinPaths: %s", lua_tostring(lua, -1));
 //	}
-
 }
 
 
@@ -1635,8 +1626,7 @@ luaGetForeignRowMarkType (RangeTblEntry *rte, LockClauseStrength strength)
 	 * option is always used. (This implies that RefetchForeignRow will never
 	 * be called, so it need not be provided either.)
 	 */
-
-	//elog(WARNING, "function %s", __func__);
+	//elog(WARNING, "%s", __func__);
 
 //	lua_getglobal(lua, "GetForeignRowMarkType");
 //
@@ -1646,7 +1636,6 @@ luaGetForeignRowMarkType (RangeTblEntry *rte, LockClauseStrength strength)
 //	}
 
 	return ROW_MARK_COPY;
-
 }
 
 static HeapTuple
@@ -1683,8 +1672,7 @@ luaRefetchForeignRow(EState *estate, ExecRowMark *erm, Datum rowid, bool *update
 	 * If the RefetchForeignRow pointer is set to NULL, attempts to re-fetch
 	 * rows will fail with an error message.
 	 */
-
-	//elog(WARNING, "function %s", __func__);
+	//elog(WARNING, "%s", __func__);
 
 //	lua_getglobal(lua, "RefetchForeignRow");
 //
@@ -1696,7 +1684,6 @@ luaRefetchForeignRow(EState *estate, ExecRowMark *erm, Datum rowid, bool *update
 	return NULL;
 
 }
-
 
 static List *
 luaImportForeignSchema(ImportForeignSchemaStmt *stmt, Oid serverOid)
@@ -1734,8 +1721,7 @@ luaImportForeignSchema(ImportForeignSchemaStmt *stmt, Oid serverOid)
 	 * IsImportableForeignTable() may be useful to test whether a given
 	 * foreign-table name will pass the filter.
 	 */
-
-	//elog(WARNING, "function %s", __func__);
+	//elog(WARNING, "%s", __func__);
 
 //	lua_getglobal(lua, "ImportForeignSchema");
 //
