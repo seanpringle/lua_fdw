@@ -855,7 +855,13 @@ luaGetForeignRelSize (PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid
 	if (lua_callback(lua, "EstimateRowWidth", 0, 1))
 	{
 		if (lua_isnumber(lua, -1))
+		{
+#if PG_VERSION_NUM < 90600
 			baserel->width = lua_tonumber(lua, -1);
+#else
+			baserel->reltarget->width = lua_tonumber(lua, -1);
+#endif
+		}
 
 		lua_pop(lua, 1);
 	}
