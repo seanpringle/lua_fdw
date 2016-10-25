@@ -45,6 +45,9 @@ remap = { }
 -- Scroll delay
 scroll = "1m"
 
+-- Batch size
+batch = 1000
+
 function ScanStart (is_explain)
 
   client = elasticsearch.client({
@@ -119,7 +122,7 @@ function ScanIterate ()
       search_type = "scan",
       scroll = scroll,
       body = {
-        size = 1000,
+        size = batch,
         query = {
           bool = {
             filter = filters,
