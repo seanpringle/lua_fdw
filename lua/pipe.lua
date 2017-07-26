@@ -14,9 +14,9 @@
 --  line text
 --)
 --SERVER lua_srv OPTIONS (
---  script '/home/900/stp900/zcat.lua',
+--  script '/path/to/pipe.lua',
 --  inject $$
---    input = "zcat /local/stp900/jam9_2017_1.gz"
+--    input = "zcat /path/to/file.gz"
 --  $$
 --);
 
@@ -24,6 +24,11 @@ input = 'cat /dev/null'
 
 function ScanStart (is_explain)
   pipe = io.popen(input.." 2>/dev/null")
+end
+
+function ScanRestart ()
+  ScanStop()
+  ScanStart()
 end
 
 function ScanIterate ()
